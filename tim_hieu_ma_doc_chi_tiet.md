@@ -1,8 +1,5 @@
 # BÁO CÁO PHÂN TÍCH: TÌM HIỂU CÁC LOẠI MÃ ĐỘC PHỔ BIẾN (MALWARE TAXONOMY & MODERN CASE STUDIES)
 
-- **Học phần:** An toàn thông tin / Phân tích mã độc
-- **Chủ đề:** Phân loại, phân tích hành vi và nghiên cứu các mẫu mã độc thế hệ mới (Giai đoạn 2023 – Hiện tại)
-- **Định dạng tài liệu:** Báo cáo kỹ thuật chi tiết (.md)
 
 ---
 
