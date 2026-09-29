@@ -130,6 +130,8 @@ Quá trình này bao gồm việc đọc các trường trong tiêu đề tệp 
   
 
 ### 1.2.2. PEStudio
+<img width="1910" height="1030" alt="image" src="https://github.com/user-attachments/assets/0e15cda0-ad86-4909-93f8-c4d81b22cf76" />
+
 - **Chức năng chính:**
   - Là công cụ Triage (sàng lọc rủi ro) chuyên sâu hàng đầu dành cho các kỹ sư SOC/DFIR.
   - Tự động chấm điểm mức độ nguy hiểm của tệp dựa trên hệ thống luật định sẵn (Indicators) mà không cần nạp tệp lên mạng.
