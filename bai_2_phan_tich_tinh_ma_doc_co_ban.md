@@ -112,6 +112,8 @@ Quá trình này bao gồm việc đọc các trường trong tiêu đề tệp 
 ```
 
 ### 1.2.1. Exeinfo PE
+<img width="558" height="254" alt="image" src="https://github.com/user-attachments/assets/a5e089d8-bd5d-4d04-87e9-95dc157b74a6" />
+
 - **Chức năng chính:**
   - Là công cụ quét chữ ký số định dạng (Signature Scanner) chuyên dụng cực mạnh trên Windows.
   - Nhận dạng chính xác trình biên dịch (Compiler như Visual C++, Delphi, MinGW, .NET, Go, Rust, MASM).
@@ -124,6 +126,7 @@ Quá trình này bao gồm việc đọc các trường trong tiêu đề tệp 
   - Lời khuyên/Gợi ý gỡ gói (Unpack info / Unpack tool suggestion) cho phân tích viên.
 - **Ví dụ thông tin có giá trị trong điều tra malware:**
   - Khi mở mẫu malware vào Exeinfo PE, công cụ thông báo: `Packer: UPX 3.96 -> Markus Oberhumer`, đồng thời gợi ý lệnh unpack `upx -d file.exe`. Nhờ đó, phân tích viên biết ngay file đang bị nén bằng UPX và chỉ cần chạy 1 dòng lệnh để đưa file về trạng thái nguyên bản trước khi phân tích tiếp, tiết kiệm hàng giờ dịch ngược stub.
+  
 
 ### 1.2.2. PEStudio
 - **Chức năng chính:**
