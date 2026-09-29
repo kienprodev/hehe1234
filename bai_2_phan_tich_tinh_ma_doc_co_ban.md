@@ -112,7 +112,8 @@ Quá trình này bao gồm việc đọc các trường trong tiêu đề tệp 
 ```
 
 ### 1.2.1. Exeinfo PE
-<img width="558" height="254" alt="image" src="https://github.com/user-attachments/assets/a5e089d8-bd5d-4d04-87e9-95dc157b74a6" />
+<img width="538" height="247" alt="image" src="https://github.com/user-attachments/assets/b78c41fd-b781-4b2b-b356-8acacfb5cb12" />
+
 
 - **Chức năng chính:**
   - Là công cụ quét chữ ký số định dạng (Signature Scanner) chuyên dụng cực mạnh trên Windows.
