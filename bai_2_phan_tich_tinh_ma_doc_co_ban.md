@@ -64,21 +64,7 @@
 
 Quá trình này bao gồm việc đọc các trường trong tiêu đề tệp (headers), tính toán chữ ký số và mã băm mật mã (cryptographic hashes), trích xuất chuỗi ký tự (strings), phân tích bảng hàm nhập/xuất (imports/exports), và dịch ngược mã máy (disassembly/decompilation) thành Assembly hoặc mã nguồn bậc cao (C, C#, Java).
 
-```
-   +-----------------------------------------------------------------+
-   |                   TỆP MÃ ĐỘC KHẢ NGHI (PE / ELF)                |
-   +-----------------------------------------------------------------+
-                                    |
-          [KHÔNG THỰC THI - PHÂN TÍCH TĨNH TRONG MÔI TRƯỜNG CÁCH LY]
-                                    |
-       +----------------------------+----------------------------+
-       |                            |                            |
-       v                            v                            v
-[Trích xuất Siêu dữ liệu]    [Kiểm tra Cấu trúc File]    [Dịch ngược / Assembly]
-- Hashes (MD5, SHA256)      - PE Headers, Sections      - Dead Listing Disassembly
-- Chữ ký số / Chứng chỉ     - Bảng hàm IAT / EAT        - Decompile sang C/C#
-- Chuỗi ký tự (Strings)     - Entropy & Packer          - Control Flow Graph (CFG)
-```
+
 
 ### 1.1.2. Mục đích cốt lõi
 1. **Xác định tính chất tệp (Triage & Categorization):** Phân loại nhanh tệp nghi vấn là lành tính (Benign), phần mềm quảng cáo/không mong muốn (PUA/Adware), hay mã độc nguy hiểm (Ransomware, Trojan, Rootkit).
