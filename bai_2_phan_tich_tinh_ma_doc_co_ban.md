@@ -246,12 +246,12 @@ Một tệp PE chuẩn thường chứa các phân vùng tiêu chuẩn:
 **Ba quy luật "vàng" phát hiện mã độc qua Section:**
 1. **Tên Section bất thường:** Xuất hiện các tên như `UPX0`, `UPX1`, `.vmp0`, `.aspack`, `packer`, hoặc tên vô nghĩa `qw89a`.
 2. **Độ lệch Virtual Size và Size of Raw Data:**
-   - Trong tệp thông thường: `VirtualSize` $\approx$ `SizeOfRawData`.
+   - Trong tệp thông thường: `VirtualSize` →\approx→ `SizeOfRawData`.
    - **Dấu hiệu Packer:** `SizeOfRawData` của section chứa code rất nhỏ (ví dụ 1 KB), nhưng `VirtualSize` lại cực lớn (ví dụ 500 KB). Điều này chỉ ra rằng khi nạp vào RAM, mã độc sẽ tự giải nén bung ra bộ nhớ để chiếm lĩnh không gian lớn.
 3. **Chỉ số Entropy (Độ hỗn loạn thông tin của Shannon):**
    - Thang đo từ `0.0` đến `8.0`.
    - Mã nguồn đã biên dịch bình thường có entropy dao động từ `4.5 - 6.5`.
-   - **Entropy $\ge 7.2 - 8.0$:** Dữ liệu trong section đó gần như chắc chắn đã bị nén chặt (compressed) hoặc mã hóa mật mã (encrypted). Đây là chỉ báo chuẩn của Packer, Crypter hoặc Payload Ransomware.
+   - **Entropy →\ge 7.2 - 8.0→:** Dữ liệu trong section đó gần như chắc chắn đã bị nén chặt (compressed) hoặc mã hóa mật mã (encrypted). Đây là chỉ báo chuẩn của Packer, Crypter hoặc Payload Ransomware.
 4. **Quyền hạn phân vùng bất thường (Section Characteristics):**
    - Phân vùng vừa có quyền **Write (Ghi)** vừa có quyền **Execute (Thực thi)** (tức `W + X`). Đây là kỹ thuật viết mã tự sửa đổi (Self-modifying code) hoặc chuẩn bị vùng nhớ để Unpack mã độc trực tiếp tại chỗ.
 
@@ -285,49 +285,69 @@ Số lượng và tên các API được import phản ánh chân thực năng l
 
 # PHẦN 2: THỰC HÀNH PHÂN TÍCH MẪU MÃ ĐỘC THỰC TẾ 
 
-
-
-Mẫu 1:
-
+## Mẫu 1: Phân tích tệp 1.sample (UPX Packed DLL)
 
 <img width="955" height="390" alt="image" src="https://github.com/user-attachments/assets/f53fe7a3-93ce-4db0-9fb3-21a85c1a930c" />
+
 <img width="697" height="533" alt="image" src="https://github.com/user-attachments/assets/a78a6962-1b8d-4d97-8c3a-222a81ac3d2f" />
 
+Trong ảnh trên ta xác định được:
+- Mã **Imphash**: `B0488027A70EE122E93F3A37F1EA80A6`
+- Các giá trị băm **MD5** và **SHA1** để xác định danh tính mã độc ban đầu.
 
-Trong ảnh trên ta xác định được mã imphash (imphash > md5,B0488027A70EE122E93F3A37F1EA80A6)
-và các giá trị md5 và sha1 để xác định đc mã độc ban đầu
 <img width="1915" height="1038" alt="image" src="https://github.com/user-attachments/assets/8b5386ea-6c43-498b-b312-19dfc4c4b077" />
--> xác định ban đầu là được pack bằng upx 
+
+-> **Nhận định ban đầu:** Tệp tin đã được đóng gói bằng UPX (UPX Packed).
+
 <img width="1388" height="685" alt="image" src="https://github.com/user-attachments/assets/b14298f8-8e07-4448-8d46-2a8703819817" />
--> xác định entropy để củng cố luận điểm file này đã được packed/encrypted
-check virustotal bằng mã file > sha256
+
+-> **Kiểm tra Entropy:** Chỉ số entropy của các phân vùng rất cao, củng cố vững chắc luận điểm file này đã bị packed hoặc mã hóa (encrypted).
+
+Kiểm tra trên VirusTotal bằng mã băm SHA256 của file:
+
 <img width="1917" height="1022" alt="image" src="https://github.com/user-attachments/assets/7b00d8c1-0b11-40c0-a39d-aea476d66928" />
+
 <img width="1066" height="428" alt="image" src="https://github.com/user-attachments/assets/91bad1e8-1959-4501-8ac8-5153887aea58" />
--> tiếp tục ta có luận điểm nó được packed bằng upx và 1 chi tiết nó có quyền RWE (Read - Write - Excution);
-Tiếp theo ta phân tích đến PE headers : 
+
+-> Tiếp tục củng cố luận điểm tệp được packed bằng UPX. Đặc biệt, ta phát hiện một chi tiết quan trọng: phân vùng có đầy đủ quyền **RWE (Read - Write - Execute)**, dấu hiệu kinh điển của việc chuẩn bị vùng nhớ để tự giải nén (unpack) mã độc trực tiếp trên RAM.
+
+---
+
+### Phân tích cấu trúc PE Headers
+
 <img width="1917" height="1078" alt="image" src="https://github.com/user-attachments/assets/15e4bcfb-1497-4d23-a9c3-13f719f13d50" />
-ta có các thông tin quan trọng sau:
-file > type > dynamic-link-library
-cpu > 64-bit
-subsystem > GUI
-Architecture = AMD64
-Type = DLL
-đây là file pe 64 bit méo phải dạng thông thường 
+
+Ta trích xuất được các thông tin kỹ thuật quan trọng sau:
+- **File Type:** `dynamic-link-library` (DLL)
+- **CPU Target:** `64-bit`
+- **Subsystem:** `GUI`
+- **Architecture:** `AMD64`
+- **Type:** `DLL`
+
+=> **Nhận xét:** Đây là file PE 64-bit méo phải dạng thông thường!
+
 <img width="1130" height="932" alt="image" src="https://github.com/user-attachments/assets/2a6defd8-5399-4172-9135-63403742efac" />
-entry point đc đặt trong upx1;
-=> Entry Point hiện tại nhiều khả năng là unpacking stub ko phải là logic gốc của ctrinh
+
+Kiểm tra trường **AddressOfEntryPoint**:
+- Điểm vào (Entry Point) hiện đang nằm trong phân vùng `upx1`.
+- => **Suy luận:** Entry Point hiện tại nhiều khả năng chỉ là **Unpacking Stub** của UPX chứ chưa phải là logic thực thi gốc (OEP) của chương trình.
+
 <img width="1342" height="470" alt="image" src="https://github.com/user-attachments/assets/9952ef23-8451-452d-bdcd-93de1dc019c6" />
-Tiếp theo mình xem phần import xem nó có những file nào bất thường :
-LoadLibraryA    → KERNEL32.DLL
-GetProcAddress  → KERNEL32.DLL
-VirtualProtect  → KERNEL32.DLL
-WinHttpOpen     → WINHTTP.DLL
-Bắt đầu ta có thể phân tích luồng ban đầu như này :
+
+Tiếp theo mình kiểm tra bảng Import (IAT) xem nó có những hàm nào bất thường:
+- `LoadLibraryA` → `KERNEL32.DLL`
+- `GetProcAddress` → `KERNEL32.DLL`
+- `VirtualProtect` → `KERNEL32.DLL`
+- `WinHttpOpen` → `WINHTTP.DLL`
+
+Bắt đầu ta có thể phác thảo mô hình phân tích luồng ban đầu như sau:
+
+```text
                   SAMPLE
                     │
         ┌───────────┼────────────┐
         ▼           ▼            ▼
- LoadLibraryA  GetProcAddress  VirtualProtect
+  LoadLibraryA  GetProcAddress  VirtualProtect
         │           │            │
         └─────┬─────┘            │
               ▼                  ▼
@@ -338,17 +358,23 @@ Bắt đầu ta có thể phân tích luồng ban đầu như này :
                                    │
                                    ▼
                               HTTP capability
+```
 
-Theo phỏng đoán 
-load packed dll -> entrypoint -> upx1 -> upx unpack stub -> upacked code và thay đổi virtualprotect(đang read write -> excution) -> original entry point
-->load các dll vào process và trả về handle/base -> GetProcAddresss() -> nó sẽ gọi thêm các hàm window api ẩn -> sau đó đến hàm khả nghi là winhttp (theo dự đoán nó có thể là dấu hiệu của c2) -> 
+**Theo phỏng đoán luồng thực thi:**
+1. Khi nạp packed DLL vào bộ nhớ →
+ightarrow→ CPU nhảy vào `EntryPoint` nằm trong section `upx1`.
+2. Chạy đoạn `UPX unpack stub` →
+ightarrow→ Giải nén payload ra bộ nhớ và gọi `VirtualProtect` (thay đổi quyền truy cập từ Read/Write sang Execution) →
+ightarrow→ Chuyển quyền điều khiển về Original Entry Point (OEP).
+3. Gọi `LoadLibraryA` để nạp các DLL cần thiết vào tiến trình và lấy handle/base →
+ightarrow→ Dùng `GetProcAddress` để phân giải động thêm các hàm Windows API ẩn.
+4. Sau đó gọi đến hàm khả nghi `WinHttpOpen` (theo dự đoán ban đầu, đây chính là dấu hiệu của kết nối mạng tới máy chủ C2).
 
 <img width="1917" height="1078" alt="image" src="https://github.com/user-attachments/assets/35f5503d-8d2f-41d1-84c6-004704429b44" />
 
+Mình tìm hiểu nó sẽ làm gì ở phần này bằng cách trace theo lệnh `WinHttpSendRequest()` mà mình đã tìm được sau khi unpack và xem ở PEStudio:
 
-
-Mình tìm hiểu nó sẽ làm gì ở phần này bằng cách trace theo lệnh WinHttpSendRequest() mà mình đã tìm được sau khi unpack và xem ở PEstudio
-
+```c
 // Hidden C++ exception states: #wind=2
 __int64 __fastcall sub_180002800(__int64 a1, const WCHAR *a2)
 {
@@ -361,7 +387,7 @@ __int64 __fastcall sub_180002800(__int64 a1, const WCHAR *a2)
   unsigned __int64 v10; // r8
   LPVOID *v11; // rdx
   DWORD dwNumberOfBytesAvailable[4]; // [rsp+50h] [rbp-B0h] BYREF
-  struct $BC2FB811D417144E831EE3AEA4A279C8 UrlComponents; // [rsp+60h] [rbp-A0h] BYREF
+  struct →BC2FB811D417144E831EE3AEA4A279C8 UrlComponents; // [rsp+60h] [rbp-A0h] BYREF
   DWORD dwNumberOfBytesRead; // [rsp+D0h] [rbp-30h] BYREF
   LPVOID lpBuffer[2]; // [rsp+D8h] [rbp-28h] BYREF
   unsigned __int64 v17; // [rsp+E8h] [rbp-18h]
@@ -442,11 +468,15 @@ __int64 __fastcall sub_180002800(__int64 a1, const WCHAR *a2)
   }
   return a1;
 }
-<img width="1537" height="995" alt="image" src="https://github.com/user-attachments/assets/529fbae8-f086-4962-a8f6-32d627b022a3" />
-Tiếp theo mình sẽ strings các domain khả nghi của con malware này đên giúp phân tích luông trở nên đơn giản hơn
-Sau 1 hôi ngồi phân tích tĩnh ta sẽ có map sau:
-<img width="1537" height="995" alt="image" src="https://github.com/user-attachments/assets/44561ac2-a58e-43f1-9897-1eb4838dd2ec" />
+```
 
+<img width="1537" height="995" alt="image" src="https://github.com/user-attachments/assets/529fbae8-f086-4962-a8f6-32d627b022a3" />
+
+Tiếp theo mình sẽ strings các domain khả nghi của con malware này để giúp phân tích luồng trở nên đơn giản hơn.
+
+Sau 1 hồi ngồi phân tích tĩnh ta sẽ có map sau:
+
+<img width="1537" height="995" alt="image" src="https://github.com/user-attachments/assets/44561ac2-a58e-43f1-9897-1eb4838dd2ec" />
 
 Sơ đồ luồng tổng quan mà mình đã dựng lại từ quá trình phân tích tĩnh:
 
@@ -534,27 +564,24 @@ Hoặc nhìn dưới dạng sơ đồ Mermaid chi tiết cho dễ hình dung lu�
 
 ```mermaid
 flowchart TD
-    A["1.sample (UPX Packed)"] -->|upx -d| B["1_de.sample (Unpacked DLL)"]
-    B -->|IIS w3wp.exe nạp DLL| C["RegisterModule()"]
-    C -->|Khởi tạo| D["MyHttpModuleFactory"]
-    D -->|GetHttpModule()| E["MyHttpModule"]
-    E -->|Bắt sự kiện OnBeginRequest| F["sub_1800031C0"]
+    A["1.sample (UPX Packed)"] --> B["1_de.sample (Unpacked DLL)"]
+    B --> C["w3wp.exe nạp DLL"]
+    C --> D["Gọi hàm RegisterModule"]
+    D --> E["MyHttpModuleFactory"]
+    E --> F["Khởi tạo MyHttpModule"]
+    F --> G["Hook sự kiện OnBeginRequest<br/>(sub_1800031C0)"]
 
-    F --> G{"Kiểm tra Request<br/>(URL, User-Agent, Referer)"}
+    G --> H{"Phân tích HTTP Request<br/>(URI, User-Agent, Referer)"}
 
-    %% Nhánh 1
-    G -->|URI == /google84d162603ffc785f.html| H["Trả về Token xác minh Google Search Console:<br/>google-site-verification: google84d162603ffc785f.html"]
+    H -->|Đường dẫn xác minh Google| I["Trả Token Google Search Console<br/>google-site-verification: google84d162603ffc785f.html"]
 
-    %% Nhánh 2
-    G -->|User-Agent chứa 'googlebot'| I{"Kiểm tra đường dẫn"}
-    I -->|/ hoặc /index.html /index.htm| J["sub_180002800 (Chrome UA)<br/>Kéo C2: http://qweb2.com/888/index2.php<br/>Tiêm link SEO rác vào HTML"]
-    I -->|/sitemap.xml| K["sub_180002800 (Chrome UA)<br/>Kéo URL: http://qweb2.com/st/<br/>sub_180002D40: tách \n & trim<br/>Sinh XML Sitemap động"]
+    H -->|User-Agent chứa googlebot| J{"Kiểm tra URL"}
+    J -->|Trang chủ / hoặc index| K["sub_180002800 Chrome UA<br/>Kéo C2: qweb2.com/888/index2.php<br/>Tiêm liên kết SEO rác"]
+    J -->|Đường dẫn /sitemap.xml| L["sub_180002800 Chrome UA<br/>Kéo C2: qweb2.com/st/<br/>sub_180002D40 xử lý dòng<br/>Sinh XML Sitemap động"]
 
-    %% Nhánh 3
-    G -->|Referer chứa 'google.com'| L["sub_180002800 (Chrome UA)<br/>Kéo: http://www.massnetworks.org/<br/>Trả nội dung lừa đảo cho nạn nhân"]
+    H -->|Referer chứa google.com| M["sub_180002800 Chrome UA<br/>Kéo massnetworks.org<br/>Chuyển hướng người dùng"]
 
-    %% Nhánh 4
-    G -->|Người dùng truy cập trực tiếp| M["Bỏ qua - Trả lời bình thường"]
+    H -->|Truy cập trực tiếp| N["Cho qua, IIS xử lý bình thường"]
 ```
 
 ---
@@ -620,8 +647,8 @@ if ( v297 == 28 && !wcscmp(lpUrl, L"/google84d162603ffc785f.html") )
     ...
 }
 ```
-$
-ightarrow$ **Ý đồ của tác giả:** Hacker dùng file HTML này để Google tin rằng hacker chính là chủ sở hữu website, từ đó có thể vào Google Search Console để submit sitemap độc hại và theo dõi thứ hạng từ khóa spam!
+
+-> **Ý đồ của tác giả:** Hacker dùng file HTML này để Google tin rằng hacker chính là chủ sở hữu website, từ đó có thể vào Google Search Console để submit sitemap độc hại và theo dõi thứ hạng từ khóa spam!
 
 ##### Nhánh 2: Nhận diện bot tìm kiếm (Googlebot Detection)
 Mã độc duyệt qua chuỗi User-Agent, đổi sang chữ thường bằng hàm `sub_180037428` (`tolower`) và so sánh với chuỗi `googlebot` (8 byte: `0x6F62656C676F6F67LL` = "googlebo" + 1 byte `116` = 't'):
@@ -703,8 +730,7 @@ __int64 __fastcall sub_180002AA0(__int64 a1, const WCHAR *a2)
 
 ##### Hàm `sub_180002D40`: Xử lý mảng Sitemap
 Hàm này nhận chuỗi phản hồi từ `http://qweb2.com/st/`:
-- Dùng `sub_1800581D0` tìm ký tự xuống dòng `
-` (mã ASCII 10).
+- Dùng `sub_1800581D0` tìm ký tự xuống dòng `\n` (mã ASCII 10).
 - Dùng `sub_180038760` (`isspace`) để lọc bỏ khoảng trắng thừa đầu và cuối mỗi dòng.
 - Đẩy từng dòng URL sạch vào `std::vector<std::string>` phục vụ việc dựng thẻ `<loc>` trong `sitemap.xml`.
 
@@ -745,14 +771,15 @@ Qua toàn bộ quá trình phân tích tĩnh, ta có thể kết luận chắc c
 
 1. **Liệt kê và gỡ module độc hại bằng lệnh `appcmd`:**
    ```cmd
-   %windir%\system32\inetsrvppcmd.exe list config -section:system.webServer/globalModules
-   %windir%\system32\inetsrvppcmd.exe uninstall module /module.name:"<Tên_Module_Khai_Báo>"
+   %windir%\system32\inetsrv\appcmd.exe list config -section:system.webServer/globalModules
+   %windir%\system32\inetsrv\appcmd.exe uninstall module /module.name:"<Tên_Module_Khai_Báo>"
    ```
+
 2. **Kiểm tra file cấu hình IIS:**
-   - Mở `C:\Windows\System32\inetsrv\configpplicationHost.config`, tìm và xóa các dòng khai báo module trỏ tới file DLL khả nghi trong `<globalModules>` và `<modules>`.
+   - Mở `C:\Windows\System32\inetsrv\config\applicationHost.config`, tìm và xóa các dòng khai báo module trỏ tới file DLL khả nghi trong `<globalModules>` và `<modules>`.
    - Rà soát file `web.config` ở thư mục web gốc.
    - Khởi động lại web server: `iisreset`.
+
 3. **Dọn dẹp trên Google Search Console:**
-   - Đăng nhập Search Console, vào mục Cài đặt $
-ightarrow$ Người dùng và quyền hạn, xóa ngay tài khoản xác minh qua file `google84d162603ffc785f.html`.
+   - Đăng nhập Search Console, vào mục Cài đặt →\rightarrow→ Người dùng và quyền hạn, xóa ngay tài khoản xác minh qua file `google84d162603ffc785f.html`.
    - Submit lại file `sitemap.xml` chuẩn và yêu cầu Google re-index để xóa các URL rác.
