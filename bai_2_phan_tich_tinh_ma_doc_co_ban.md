@@ -283,19 +283,65 @@ Số lượng và tên các API được import phản ánh chân thực năng l
 
 ---
 
-# PHẦN 2: THỰC HÀNH PHÂN TÍCH MẪU MÃ ĐỘC THỰC TẾ (60 ĐIỂM)
+# PHẦN 2: THỰC HÀNH PHÂN TÍCH MẪU MÃ ĐỘC THỰC TẾ 
 
-> **Cấu trúc phần thực hành:** 
-> - Phần thực hành được chia thành 2 mẫu phân tích chuyên sâu (30 điểm / 1 mẫu) theo đúng yêu cầu đề bài.
-> - Hai mẫu được lựa chọn là hai đại diện kinh điển và nguy hiểm nhất trong lịch sử phân tích mã độc thực chiến:
->   - **Mẫu 01:** `mssecsvc.exe` (WannaCry Ransomware Core Dropper / Propagation Module).
->   - **Mẫu 02:** `AgentTesla_Stealer.exe` (Trojan InfoStealer & Keylogger thế hệ mới).
-> - Kèm theo bộ khung biểu mẫu chuẩn (Template) để ứng dụng trên bất kỳ mẫu tệp nào khác được cung cấp trong phòng lab.
 
----
 
-## 2.1. Quy trình Phân tích Tĩnh Chuẩn 5 Bước (SOP)
+Mẫu 1:
 
+
+<img width="955" height="390" alt="image" src="https://github.com/user-attachments/assets/f53fe7a3-93ce-4db0-9fb3-21a85c1a930c" />
+<img width="697" height="533" alt="image" src="https://github.com/user-attachments/assets/a78a6962-1b8d-4d97-8c3a-222a81ac3d2f" />
+
+
+Trong ảnh trên ta xác định được mã imphash (imphash > md5,B0488027A70EE122E93F3A37F1EA80A6)
+và các giá trị md5 và sha1 để xác định đc mã độc ban đầu
+<img width="1915" height="1038" alt="image" src="https://github.com/user-attachments/assets/8b5386ea-6c43-498b-b312-19dfc4c4b077" />
+-> xác định ban đầu là được pack bằng upx 
+<img width="1388" height="685" alt="image" src="https://github.com/user-attachments/assets/b14298f8-8e07-4448-8d46-2a8703819817" />
+-> xác định entropy để củng cố luận điểm file này đã được packed/encrypted
+check virustotal bằng mã file > sha256
+<img width="1917" height="1022" alt="image" src="https://github.com/user-attachments/assets/7b00d8c1-0b11-40c0-a39d-aea476d66928" />
+<img width="1066" height="428" alt="image" src="https://github.com/user-attachments/assets/91bad1e8-1959-4501-8ac8-5153887aea58" />
+-> tiếp tục ta có luận điểm nó được packed bằng upx và 1 chi tiết nó có quyền RWE (Read - Write - Excution);
+Tiếp theo ta phân tích đến PE headers : 
+<img width="1917" height="1078" alt="image" src="https://github.com/user-attachments/assets/15e4bcfb-1497-4d23-a9c3-13f719f13d50" />
+ta có các thông tin quan trọng sau:
+file > type > dynamic-link-library
+cpu > 64-bit
+subsystem > GUI
+Architecture = AMD64
+Type = DLL
+đây là file pe 64 bit méo phải dạng thông thường 
+<img width="1130" height="932" alt="image" src="https://github.com/user-attachments/assets/2a6defd8-5399-4172-9135-63403742efac" />
+entry point đc đặt trong upx1;
+=> Entry Point hiện tại nhiều khả năng là unpacking stub ko phải là logic gốc của ctrinh
+<img width="1342" height="470" alt="image" src="https://github.com/user-attachments/assets/9952ef23-8451-452d-bdcd-93de1dc019c6" />
+Tiếp theo mình xem phần import xem nó có những file nào bất thường :
+LoadLibraryA    → KERNEL32.DLL
+GetProcAddress  → KERNEL32.DLL
+VirtualProtect  → KERNEL32.DLL
+WinHttpOpen     → WINHTTP.DLL
+Bắt đầu ta có thể phân tích luồng ban đầu như này :
+                  SAMPLE
+                    │
+        ┌───────────┼────────────┐
+        ▼           ▼            ▼
+ LoadLibraryA  GetProcAddress  VirtualProtect
+        │           │            │
+        └─────┬─────┘            │
+              ▼                  ▼
+      Dynamic API Resolution   Memory Protection
+                                   │
+                                   ▼
+                              WinHttpOpen
+                                   │
+                                   ▼
+                              HTTP capability
+
+Theo phỏng đoán 
+load packed dll -> entrypoint -> upx1 -> upx unpack stub -> upacked code và thay đổi virtualprotect(đang read write -> excution) -> original entry point
+->load các dll vào process và trả về handle/base -> GetProcAddresss() -> nó sẽ gọi thêm các hàm window api ẩn -> sau đó đến hàm khả nghi là winhttp (theo dự đoán nó có thể là dấu hiệu của c2) -> 
 ```
 [BƯỚC 1: LẤY BĂM & NHẬN DIỆN BAN ĐẦU]
   - Tính MD5, SHA256, Imphash qua CertUtil / PowerShell / HashMyFiles.
