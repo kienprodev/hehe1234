@@ -147,6 +147,9 @@ Quá trình này bao gồm việc đọc các trường trong tiêu đề tệp 
   - PEStudio gắn cờ đỏ cảnh báo: API `VirtualAllocEx` và `WriteProcessMemory` cùng xuất hiện, được gán nhãn MITRE ATT&CK là **T1055 (Process Injection)**. Phân tích viên ngay lập tức xác định được mẫu này mang hành vi chích mã độc vào tiến trình hệ thống hợp pháp để ẩn mình.
 
 ### 1.2.3. Strings (Sysinternals) & Mandiant FLOSS
+<img width="1897" height="866" alt="image" src="https://github.com/user-attachments/assets/2949fdbe-eda6-491e-9df0-85cc5bb8bd74" />
+
+
 - **Chức năng chính:**
   - Quét toàn bộ khối nhị phân để lọc ra các chuỗi ký tự in ấn được (printable characters) có độ dài từ 3 hoặc 4 ký tự trở lên.
   - Hỗ trợ trích xuất cả chuẩn mã hóa **ASCII (1-byte)** và **Unicode UTF-16LE (2-byte)**.
@@ -161,6 +164,8 @@ Quá trình này bao gồm việc đọc các trường trong tiêu đề tệp 
   - Khi chạy `strings -a sample.exe`, xuất hiện dòng: `http://update-microsoft-service[.]com/gate.php?id=` và `SOFTWARE\Microsoft\Windows\CurrentVersion\Run`. Điều này cung cấp ngay lập tức 2 chỉ số IOC quan trọng: Domain C2 để đưa vào hệ thống Firewall/SIEM chặn đứng kết nối, và vị trí mã độc cắm rễ khởi động cùng Windows.
 
 ### 1.2.4. CFF Explorer
+<img width="1917" height="1021" alt="image" src="https://github.com/user-attachments/assets/2b0ab0bd-eef9-4af8-b2af-3a4530585241" />
+
 - **Chức năng chính:**
   - Bộ biên tập và mổ xẻ cấu trúc Portable Executable (PE32 cho x86 và PE32+ cho x64) cực kỳ mạnh mẽ.
   - Cho phép xem, chỉnh sửa toàn bộ các trường trong DOS Header, NT Headers, File Header, Optional Header.
