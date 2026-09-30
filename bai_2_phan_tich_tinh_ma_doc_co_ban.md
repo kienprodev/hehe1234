@@ -342,308 +342,111 @@ Bắt đầu ta có thể phân tích luồng ban đầu như này :
 Theo phỏng đoán 
 load packed dll -> entrypoint -> upx1 -> upx unpack stub -> upacked code và thay đổi virtualprotect(đang read write -> excution) -> original entry point
 ->load các dll vào process và trả về handle/base -> GetProcAddresss() -> nó sẽ gọi thêm các hàm window api ẩn -> sau đó đến hàm khả nghi là winhttp (theo dự đoán nó có thể là dấu hiệu của c2) -> 
-```
-[BƯỚC 1: LẤY BĂM & NHẬN DIỆN BAN ĐẦU]
-  - Tính MD5, SHA256, Imphash qua CertUtil / PowerShell / HashMyFiles.
-  - Tra cứu VirusTotal / MalwareBazaar để xác định danh tính sơ bộ.
 
-[BƯỚC 2: PHÁT HIỆN PACKER & XÁC ĐỊNH ENTROPY]
-  - Quét bằng Exeinfo PE / Detect It Easy.
-  - Kiểm tra tỷ lệ Virtual Size vs. Raw Size và Shannon Entropy (> 7.0 = Encrypted/Packed).
+<img width="1917" height="1078" alt="image" src="https://github.com/user-attachments/assets/35f5503d-8d2f-41d1-84c6-004704429b44" />
 
-[BƯỚC 3: MỔ XẺ PE HEADERS & SECTIONS]
-  - Mở bằng CFF Explorer / PEStudio.
-  - Đọc Machine architecture (x86/x64), Compile Timestamp, Subsystem, Entry Point.
-  - Rà soát các section bất thường (.upx, .vmp, w+x permissions).
 
-[BƯỚC 4: ĐỌC BẢNG IAT & TRÍCH XUẤT CHUỖI]
-  - Liệt kê các API độc hại: Process Injection, Persistence, Evasion, Crypto.
-  - Chạy Strings / FLOSS lọc URLs, C2 IPs, Registry Keys, Ransom Notes, Mutex.
 
-[BƯỚC 5: TỔNG HỢP IOCS & KẾT LUẬN MỨC ĐỘ RỦI RO]
-  - Lập bảng danh mục IOCs (Network, Host, Registry).
-  - Đưa ra khuyến nghị ngăn chặn mà không cần thực thi tệp.
-```
+Mình tìm hiểu nó sẽ làm gì ở phần này bằng cách trace theo lệnh WinHttpSendRequest() mà mình đã tìm được sau khi unpack và xem ở PEstudio
 
----
+// Hidden C++ exception states: #wind=2
+__int64 __fastcall sub_180002800(__int64 a1, const WCHAR *a2)
+{
+  void *v4; // r14
+  void *v5; // rsi
+  DWORD v6; // eax
+  void *v7; // rax
+  void *v8; // rbx
+  LPVOID *v9; // rdx
+  unsigned __int64 v10; // r8
+  LPVOID *v11; // rdx
+  DWORD dwNumberOfBytesAvailable[4]; // [rsp+50h] [rbp-B0h] BYREF
+  struct $BC2FB811D417144E831EE3AEA4A279C8 UrlComponents; // [rsp+60h] [rbp-A0h] BYREF
+  DWORD dwNumberOfBytesRead; // [rsp+D0h] [rbp-30h] BYREF
+  LPVOID lpBuffer[2]; // [rsp+D8h] [rbp-28h] BYREF
+  unsigned __int64 v17; // [rsp+E8h] [rbp-18h]
+  unsigned __int64 v18; // [rsp+F0h] [rbp-10h]
+  char v19; // [rsp+100h] [rbp+0h] BYREF
+  char v20; // [rsp+300h] [rbp+200h] BYREF
 
-## 2.2. Mẫu Phân Tích 01: Ransomware WannaCry (Mssecsvc.exe Dropper) (30đ)
+  *(_OWORD *)a1 = 0;
+  *(_QWORD *)(a1 + 16) = 0;
+  *(_QWORD *)(a1 + 24) = 15;
+  *(_BYTE *)a1 = 0;
+  v4 = WinHttpOpen(
+         L"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+         0,
+         nullptr,
+         nullptr,
+         0);
+  if ( v4 )
+  {
+    memset(&UrlComponents, 0, 24);
+    memset(&UrlComponents.dwHostNameLength, 0, 40);
+    memset(&UrlComponents.dwUrlPathLength, 0, 24);
+    UrlComponents.dwStructSize = 104;
+    UrlComponents.lpszHostName = &v19;
+    UrlComponents.dwHostNameLength = 256;
+    UrlComponents.lpszUrlPath = &v20;
+    UrlComponents.dwUrlPathLength = 1024;
+    WinHttpCrackUrl(a2, 0, 0, &UrlComponents);
+    v5 = WinHttpConnect(v4, (LPCWSTR)UrlComponents.lpszHostName, UrlComponents.nPort, 0);
+    if ( v5 )
+    {
+      v6 = 0;
+      if ( UrlComponents.nScheme == INTERNET_SCHEME_GOPHER )
+        v6 = 0x800000;
+      v7 = WinHttpOpenRequest(v5, L"GET", (LPCWSTR)UrlComponents.lpszUrlPath, nullptr, nullptr, nullptr, v6);
+      v8 = v7;
+      if ( v7 )
+      {
+        if ( WinHttpSendRequest(v7, nullptr, 0, nullptr, 0, 0, 0) && WinHttpReceiveResponse(v8, nullptr) )
+        {
+          dwNumberOfBytesRead = 0;
+          do
+          {
+            dwNumberOfBytesAvailable[0] = 0;
+            if ( WinHttpQueryDataAvailable(v8, dwNumberOfBytesAvailable) )
+            {
+              if ( !dwNumberOfBytesAvailable[0] )
+                break;
+              sub_180006BA0(lpBuffer, dwNumberOfBytesAvailable[0], 0);
+              v9 = lpBuffer;
+              if ( v18 > 0xF )
+                v9 = (LPVOID *)lpBuffer[0];
+              if ( WinHttpReadData(v8, v9, dwNumberOfBytesAvailable[0], &dwNumberOfBytesRead) )
+              {
+                v10 = dwNumberOfBytesRead;
+                if ( v17 < dwNumberOfBytesRead )
+                  v10 = v17;
+                v11 = lpBuffer;
+                if ( v18 > 0xF )
+                  v11 = (LPVOID *)lpBuffer[0];
+                sub_1800075F0(a1, v11, v10);
+              }
+              if ( v18 > 0xF )
+              {
+                if ( v18 + 1 >= 0x1000 && (unsigned __int64)lpBuffer[0] - *((_QWORD *)lpBuffer[0] - 1) - 8 > 0x1F )
+                  invalid_parameter_noinfo_noreturn();
+                sub_180031A5C();
+              }
+            }
+          }
+          while ( dwNumberOfBytesAvailable[0] );
+        }
+        WinHttpCloseHandle(v8);
+      }
+      WinHttpCloseHandle(v5);
+    }
+    WinHttpCloseHandle(v4);
+  }
+  return a1;
+}
+<img width="1537" height="995" alt="image" src="https://github.com/user-attachments/assets/529fbae8-f086-4962-a8f6-32d627b022a3" />
+Tiếp theo mình sẽ strings các domain khả nghi của con malware này đên giúp phân tích luông trở nên đơn giản hơn
+Sau 1 hôi ngồi phân tích tĩnh ta sẽ có map sau:
+<img width="1537" height="995" alt="image" src="https://github.com/user-attachments/assets/44561ac2-a58e-43f1-9897-1eb4838dd2ec" />
 
-### 2.2.1. Thông tin định danh & Metadata
 
-```
-+---------------------------------------------------------------------------------------------------------+
-|                                    THÔNG TIN ĐỊNH DANH MẪU 01                                           |
-+----------------------+----------------------------------------------------------------------------------+
-| Tên tệp phân tích    | mssecsvc.exe (WannaCry Dropper & SMB Worm Component)                             |
-| Kích thước tệp       | 3,514,368 bytes (~3.35 MB)                                                       |
-| Kiểu tệp (File Type) | Win32 PE32 Executable (GUI) Intel 80386                                          |
-| MD5                  | db349b97c37d22f5b0d0adc8f72530ac                                                 |
-| SHA-1                | 5ff465acf83e72336e4e4e90d87027375736023c                                         |
-| SHA-256              | 24d004a104d4d54034dbc29c2f40f77baebe68ec4c70544ef7b53bce31580f8d                 |
-| Imphash              | f34d5f2d4577ed6d9ceec516c1f5a744                                                 |
-| SSDEEP               | 49152:1xMGW1J8Fk7uV...                                                           |
-| VirusTotal Detection | 70/72 Antivirus Vendors gắn cờ Malicious (Ransom.WannaCrypt / Trojan.WannaCry)   |
-| Chữ ký số (Signature)| Unsigned (Không có chữ ký số hợp lệ)                                             |
-+----------------------+----------------------------------------------------------------------------------+
-```
 
-### 2.2.2. Đánh giá Đóng gói (Packer) & Entropy Phân vùng
-- **Kết quả quét Exeinfo PE & DIE:**
-  - Compiler: `Microsoft Visual C++ 6.0` (Biên dịch theo định dạng cổ điển).
-  - Trạng thái đóng gói: **Not Packed** (Tệp dropper bên ngoài không bị nén bằng UPX, nhưng giấu payload zip mã hóa bên trong mục Resource).
-- **Phân tích Phân vùng & Entropy:**
-
-| Tên Section | Virtual Size | Size of Raw Data | Virtual Address | Entropy | Đặc tính (Characteristics) | Đánh giá |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `.text` | 0x00007880 | 0x00008000 | 0x00001000 | 6.42 | Read, Execute (`0x60000020`) | Bình thường (Chứa code) |
-| `.rdata` | 0x00002360 | 0x00003000 | 0x00009000 | 4.85 | Read Only (`0x40000040`) | Bình thường (Imports, strings) |
-| `.data` | 0x000014C8 | 0x00001000 | 0x0000C000 | 3.12 | Read, Write (`0xC0000040`) | Bình thường (Biến toàn cục) |
-| `.rsrc` | **0x00350B40** | **0x00351000** | 0x0000E000 | **7.98** | Read Only (`0x40000040`) | **CỰC KỲ NGUY HIỂM** |
-
-> **Nhận xét chuyên sâu:** Phân vùng `.rsrc` chiếm tới **3.4 MB** (hơn 98% dung lượng toàn bộ file) và có giá trị **Entropy = 7.98** (xấp xỉ mức tối đa 8.0). Điều này chỉ ra phân vùng Resource đang chứa một khối nhị phân bị nén hoặc mã hóa cực mạnh (thực chất là tệp `taskche.exe` chứa toàn bộ cơ chế mã hóa RSA/AES của WannaCry được bọc mật khẩu).
-
-### 2.2.3. Phân tích Các API đáng ngờ (Suspicious APIs / IAT)
-Khi phân tích tệp qua PEStudio và CFF Explorer trong bảng IAT (`KERNEL32.dll`, `ADVAPI32.dll`, `WININET.dll`), phát hiện các hàm có độ rủi ro rất cao:
-
-```
-[MÃ ĐỘC KẾT NỐI VÀ KIỂM TRA MẠNG]
-  - InternetOpenA (WININET.dll)
-  - InternetOpenUrlA (WININET.dll)
-  ---> Mục đích: Thực hiện request HTTP đến một domain bên ngoài trước khi làm bất kỳ hành động nào.
-
-[MÃ ĐỘC TẠO DỊCH VỤ & THIẾT LẬP PERSISTENCE]
-  - OpenSCManagerA (ADVAPI32.dll)
-  - CreateServiceA (ADVAPI32.dll)
-  - StartServiceA (ADVAPI32.dll)
-  - OpenServiceA (ADVAPI32.dll)
-  ---> Mục đích: Can thiệp sâu vào trình quản lý Service của Windows, tạo dịch vụ mới chạy ngầm cùng quyền SYSTEM.
-
-[MÃ ĐỘC THAO TÁC TÀI NGUYÊN VÀ GIẢI NÉN PAYLOAD]
-  - FindResourceA (KERNEL32.dll)
-  - SizeofResource (KERNEL32.dll)
-  - LoadResource (KERNEL32.dll)
-  - LockResource (KERNEL32.dll)
-  ---> Mục đích: Định vị và đọc khối dữ liệu 3.4 MB đã mã hóa trong phần .rsrc lên RAM.
-
-[MÃ ĐỘC THỰC THI TIẾN TRÌNH CON]
-  - CreateProcessA (KERNEL32.dll)
-  ---> Mục đích: Ghi payload ra ổ đĩa và kích hoạt tiến trình mã hóa tệp đòi tiền chuộc.
-```
-
-### 2.2.4. Trích xuất Chuỗi (Strings) & IOCs sơ bộ
-Sử dụng công cụ `strings -n 8 mssecsvc.exe`, trích xuất được các chuỗi mang giá trị điều tra đặc biệt:
-
-1. **Chuỗi URL Killswitch Domain:**
-   ```text
-   http://www.iuqerfsodp9ifjaposdfjhgosurijfaewrwergwea.com
-   ```
-   *(Đây là tên miền Killswitch nổi tiếng được Marcus Hutchins phát hiện. Nếu URL này phản hồi truy vấn thành công, mã độc sẽ tự thoát; nếu không kết nối được, mã độc lập tức kích hoạt mã hóa toàn bộ máy).*
-2. **Chuỗi Tên Dịch vụ Windows (Windows Service):**
-   ```text
-   mssecsvc2.0
-   Microsoft Security Center (2.0) Service
-   ```
-   *(Mã độc đặt tên giả mạo thành phần bảo mật chính thống của Microsoft để đánh lừa quản trị viên).*
-3. **Chuỗi Tham số Thực thi & File Thả rơi:**
-   ```text
-   tasksche.exe
-   c:\%s\tasksche.exe
-   -m security
-   ```
-4. **Chuỗi Thao tác Mạng SMB (Quét cổng 445):**
-   ```text
-   192.168.
-   10.
-   172.16.
-   ```
-
-### 2.2.5. Dấu hiệu Persistence & Cơ chế Phán đoán Hành vi
-- **Dấu hiệu Persistence (Bám rễ):**
-  - Tệp gọi API `CreateServiceA` với tham số `SERVICE_AUTO_START` và trỏ đường dẫn nhị phân tới chính bản sao của nó trong `C:\Windows\mssecsvc.exe`. Điều này bảo đảm mã độc sẽ sống sót sau khi khởi động lại máy tính.
-- **Hành vi được dự đoán qua Phân tích Tĩnh:**
-  1. Kiểm tra kết nối mạng tới URL killswitch bằng `InternetOpenUrlA`.
-  2. Tạo dịch vụ hệ thống `mssecsvc2.0`.
-  3. Bung tệp tài nguyên từ `.rsrc` bằng `LockResource`, thả ra đĩa với tên `tasksche.exe`.
-  4. Thực thi `tasksche.exe` bằng `CreateProcessA` để bắt đầu quét các máy trong mạng qua cổng SMB (TCP 445) và thực hiện mã hóa tài liệu.
-
-### 2.2.6. Kết luận & Đánh giá Rủi ro
-- **Phân loại:** Ransomware Dropper / Worm Loader.
-- **Mức độ rủi ro:** **CRITICAL (Khẩn cấp - Nguy hại tối đa)**.
-- **IOCs thu thập được:**
-  - File SHA256: `24d004a104d4d54034dbc29c2f40f77baebe68ec4c70544ef7b53bce31580f8d`
-  - URL C2/Killswitch: `http://www.iuqerfsodp9ifjaposdfjhgosurijfaewrwergwea[.]com`
-  - Tên Service độc hại: `mssecsvc2.0`
-  - Tên file sinh ra: `tasksche.exe`
-
----
-
-## 2.3. Mẫu Phân Tích 02: Trojan Stealer / RAT (RedLine Stealer Payload) (30đ)
-
-### 2.3.1. Thông tin định danh & Metadata
-
-```
-+---------------------------------------------------------------------------------------------------------+
-|                                    THÔNG TIN ĐỊNH DANH MẪU 02                                           |
-+----------------------+----------------------------------------------------------------------------------+
-| Tên tệp phân tích    | Invoice_Doc_2024.exe (RedLine Stealer Sample)                                    |
-| Kích thước tệp       | 286,720 bytes (~280 KB)                                                          |
-| Kiểu tệp (File Type) | Win32 PE32 Executable (.NET Assembly) Intel 80386                                |
-| Subsystem            | Windows GUI (Không hiển thị cửa sổ console khi chạy)                             |
-| MD5                  | e3a1c874b967912384a6549bca7f9102                                                 |
-| SHA-1                | c2b96e51147a32947192a832f912c75a415a7789                                         |
-| SHA-256              | 7c94b281f62136e0938b815615dca1417539dfb321a4e21a4f3261294819ca1e                 |
-| Imphash              | f34d5f2d4577ed6d9ceec516c1f5a744 (.NET mscoree.dll stub)                         |
-| TimeDateStamp        | 2024-03-14 02:15:30 UTC                                                          |
-| VirusTotal Detection | 63/71 Antivirus Vendors (Trojan.MSIL.RedLine / Spyware.RedLine)                 |
-+----------------------+----------------------------------------------------------------------------------+
-```
-
-### 2.3.2. Đánh giá Đóng gói & Trình biên dịch (.NET / ConfuserEx)
-- **Kết quả quét Exeinfo PE & DIE:**
-  - Runtime / Compiler: `.NET Framework v4.0.30319` (`mscoree.dll -> _CorExeMain`).
-  - Protector / Obfuscator: **ConfuserEx v1.0.0** (Công cụ làm rối mã nguồn .NET cực kỳ phổ biến).
-  - Tình trạng: Các tên hàm, tên biến bị đổi thành các ký tự vô nghĩa hoặc ký tự tiếng Trung/Ả Rập nhằm chống Decompiler như dnSpy, ILSpy.
-- **Phân tích Phân vùng & Entropy:**
-
-| Tên Section | Virtual Size | Size of Raw Data | Entropy | Đặc tính | Đánh giá |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| `.text` | 0x00042B10 | 0x00043000 | **7.64** | Execute, Read (`0x60000020`) | **Khả nghi cao (Obfuscated .NET code)** |
-| `.rsrc` | 0x00002480 | 0x00002600 | 4.15 | Read Only (`0x40000040`) | Bình thường (Manifest, Icon PDF giả) |
-| `.reloc` | 0x0000000C | 0x00000200 | 0.12 | Read Only (`0x42000040`) | Tái định vị .NET stub |
-
-> **Nhận xét:** Entropy phân vùng `.text` đạt **7.64**, chứng minh mã IL (Intermediate Language) bên trong đã bị ConfuserEx mã hóa các khối hằng số (Constants Protection) và luồng điều khiển (Control Flow Obfuscation).
-
-### 2.3.3. Phân tích Các API & Phương thức độc hại
-Đối với tệp .NET, bảng IAT chỉ import duy nhất hàm `_CorExeMain` từ `mscoree.dll`. Tuy nhiên, thông qua việc phân tích Metadata Tokens và Strings bằng PEStudio/FLOSS, phát hiện các lệnh gọi thư viện hệ thống cực kỳ nguy hiểm:
-
-```
-[THU THẬP THÔNG TIN TRÌNH DUYỆT & VÍ TIỀN SỐ]
-  - System.Data.SQLite (Truy vấn cơ sở dữ liệu lịch sử và mật khẩu)
-  - CryptUnprotectData (API Windows DPAPI giải mã mật khẩu đã lưu trong Chrome/Edge)
-  - Environment.GetFolderPath (Truy cập thư mục AppData, LocalAppData)
-
-[THU THẬP TÀI KHOẢN VÀ THẺ TÍN DỤNG]
-  - autofill, logins, cookies, Web Data
-  - \Wallet\ (Truy cập ví Bitcoin, Ethereum, MetaMask, Exodus)
-
-[TRUYỀN DỮ LIỆU ĐÁNH CẮP RA MÁY CHỦ NGOÀI (EXFILTRATION)]
-  - System.ServiceModel (WCF - Windows Communication Foundation để giao tiếp C2)
-  - System.Net.WebClient (Tải thêm payload hoặc gửi dữ liệu qua HTTP POST)
-```
-
-### 2.3.4. Trích xuất Chuỗi (Strings, C2 Server, Regex thu thập dữ liệu)
-Mặc dù bị làm rối mã, công cụ trích xuất chuỗi vẫn bộc lộ các mẫu truy vấn và đường dẫn quan trọng:
-
-1. **Chuỗi Truy vấn Thư mục Đích danh (Target Paths):**
-   ```text
-   \Google\Chrome\User Data\Default\Login Data
-   \Microsoft\Edge\User Data\Default\Network\Cookies
-   \Mozilla\Firefox\Profiles\
-   \Discord\Local Storage\leveldb
-   \Telegram Desktop\tdata
-   ```
-2. **Địa chỉ C2 Server & Cổng Giao tiếp:**
-   ```text
-   194.26.229[.]42:4125
-   net.tcp://194.26.229.42:4125/
-   ```
-   *(Giao thức `net.tcp` là đặc trưng độc quyền của dòng mã độc RedLine Stealer khi gửi thông tin dạng binary XML về C2).*
-3. **Các tham số Fingerprinting (Định danh nạn nhân):**
-   ```text
-   ProcessorNameString
-   HardDriveSerial
-   IPv4Address
-   InstalledBrowsers
-   InstalledWallets
-   ```
-
-### 2.3.5. Dấu hiệu Persistence & Evasion
-- **Dấu hiệu Persistence:**
-  - Phát hiện chuỗi tham số thiết lập Scheduled Task:
-    ```text
-    schtasks /create /tn "MicrosoftEdgeUpdateTaskMachine" /tr "C:\Users\...\Invoice_Doc_2024.exe" /sc onlogon /rl highest
-    ```
-    *(Mã độc tự gán nhiệm vụ chạy ngầm với quyền quản trị cao nhất mỗi khi người dùng đăng nhập vào Windows).*
-- **Dấu hiệu Khóa Registry:**
-  - Chuỗi tham chiếu: `Software\Microsoft\Windows\CurrentVersion\Run` -> Tạo khóa có tên `EdgeUpdate`.
-
-### 2.3.6. Kết luận & Đánh giá Rủi ro
-- **Phân loại:** Information Stealer (Phần mềm độc hại chuyên đánh cắp dữ liệu danh tính, ví tiền số và mật khẩu).
-- **Mức độ rủi ro:** **HIGH (Nguy hiểm cao)**.
-- **IOCs thu thập được:**
-  - File SHA256: `7c94b281f62136e0938b815615dca1417539dfb321a4e21a4f3261294819ca1e`
-  - C2 IP & Port: `194.26.229[.]42:4125` (Protocol: net.tcp)
-  - Tên Scheduled Task giả mạo: `MicrosoftEdgeUpdateTaskMachine`
-  - Khóa Registry can thiệp: `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\EdgeUpdate`
-
----
-
-## 2.4. Khung Biểu Mẫu Báo Cáo Chuẩn (Standard Report Template)
-
-> *Sinh viên có thể sử dụng khung mẫu dưới đây để thực hiện phân tích tĩnh cho bất kỳ tệp thực thi nào được giao trong các bài thực hành tiếp theo.*
-
-```markdown
-### BÁO CÁO PHÂN TÍCH TĨNH: [TÊN MẪU TỆP]
-
-#### 1. Định danh Tệp & Siêu dữ liệu
-- **Tên file:** 
-- **Kích thước:** ... bytes
-- **Định dạng file:** PE32 (32-bit) / PE32+ (64-bit) / .NET / DLL
-- **Hashes:**
-  - MD5: ...
-  - SHA256: ...
-  - Imphash: ...
-- **Trình biên dịch (Compiler):** (VD: MSVC++ / MinGW / Delphi / Golang)
-- **Thời gian biên dịch (TimeDateStamp):** ...
-- **Chữ ký số (Digital Signature):** (Unsigned / Valid / Fake / Self-signed)
-
-#### 2. Kiểm tra Packer & Phân vùng (Sections)
-- **Packer / Obfuscation:** (VD: UPX / None / Themida / ConfuserEx)
-- **Bảng phân vùng (Section Table):**
-  | Tên Section | Virtual Size | Raw Size | Entropy | Quyền (Characteristics) | Đánh giá |
-  | :--- | :--- | :--- | :--- | :--- | :--- |
-  | .text | ... | ... | ... | ... | ... |
-  | .data | ... | ... | ... | ... | ... |
-  | .rsrc | ... | ... | ... | ... | ... |
-
-#### 3. Bảng hàm nhập (Import Address Table - IAT)
-- **Các thư viện liên kết (DLLs):** (VD: KERNEL32, USER32, ADVAPI32, WININET)
-- **Danh sách API đáng ngờ:**
-  - Nhóm tiêm mã (Injection): ...
-  - Nhóm bám rễ (Persistence): ...
-  - Nhóm trinh sát / Evasion: ...
-  - Nhóm mạng (Network): ...
-
-#### 4. Trích xuất Chuỗi (Strings Extraction)
-- **C2 Servers / URLs:** (VD: http://..., IP:Port)
-- **File / Directory Paths:** (VD: C:\Windows\System32\..., %TEMP%\...)
-- **Registry Keys:** (VD: HKCU\...\Run)
-- **Commands / Scripts:** (VD: cmd.exe /c ..., powershell ...)
-
-#### 5. Đánh giá Hành vi & Kết luận Rủi ro
-- **Phân loại họ mã độc:** (Ransomware / Stealer / RAT / Dropper / Worm)
-- **Mức độ rủi ro:** LOW / MEDIUM / HIGH / CRITICAL
-- **Hành vi dự đoán:** (Mô tả 3 - 5 bước mã độc sẽ thực hiện)
-- **Đề xuất biện pháp phòng chống (IoC Blocking):** (IP blacklist, YARA rule)
-```
-
----
-
-# TỔNG KẾT & TÀI LIỆU THAM KHẢO
-
-### Bài học rút ra từ phân tích tĩnh
-1. **Phân tích tĩnh là bước đi đầu tiên bắt buộc:** Nó giúp hình thành bức tranh toàn cảnh về nguồn gốc, cấu trúc và nguy cơ tiềm ẩn của tệp nhị phân trước khi đưa vào môi trường thực thi động.
-2. **Không chạy file vẫn thu hoạch được 80% IOCs cốt lõi:** Nhờ vào việc đối chiếu IAT, giải mã chuỗi, phân tích Section Entropy và trích xuất Metadata, phân tích viên có thể cung cấp ngay lập tức các IP C2, tên Registry, mã băm cho đội ngũ phòng thủ (Blue Team/SOC) để ngăn chặn cuộc tấn công kịp thời.
-3. **Luôn chuẩn bị kỹ năng giải nén (Unpacking):** Các chủng mã độc hiện đại luôn đi kèm cơ chế đóng gói (Packer/Protector). Việc thành thạo các công cụ nhận diện như Exeinfo PE hay DIE là điều kiện tiên quyết để phân tích mã độc thành công.
-
----
-
-### Danh mục tài liệu tham khảo chính thống
-1. **Practical Malware Analysis: The Hands-On Guide to Dissecting Malicious Software** – *Michael Sikorski & Andrew Honig*.
-2. **Learning Malware Analysis: Explore the concepts, tools, and techniques** – *Monnappa K A*.
-3. **Microsoft PE Format Specification:** [Microsoft Learn - PE Format](https://learn.microsoft.com/en-us/windows/win32/debug/pe-format).
-4. **PEStudio Documentation & Reference:** [Winitor - PEStudio Official Guide](https://www.winitor.com/).
-5. **MITRE ATT&CK Framework for Enterprise:** [MITRE ATT&CK Matrix](https://attack.mitre.org/).
-6. **Mandiant FLARE Team FLOSS:** [FLOSS Repository on GitHub](https://github.com/mandiant/flare-floss).
-7. **MalwareBazaar Database & Samples:** [Abuse.ch MalwareBazaar](https://bazaar.abuse.ch/).
+Đây là mã giả của nó  
