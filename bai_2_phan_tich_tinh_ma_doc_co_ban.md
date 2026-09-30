@@ -473,10 +473,7 @@ __int64 __fastcall sub_180002800(__int64 a1, const WCHAR *a2)
 <img width="1537" height="995" alt="image" src="https://github.com/user-attachments/assets/529fbae8-f086-4962-a8f6-32d627b022a3" />
 
 Tiếp theo mình sẽ strings các domain khả nghi của con malware này để giúp phân tích luồng trở nên đơn giản hơn.
-
-Sau 1 hồi ngồi phân tích tĩnh ta sẽ có map sau:
-
-<img width="1537" height="995" alt="image" src="https://github.com/user-attachments/assets/44561ac2-a58e-43f1-9897-1eb4838dd2ec" />
+Tiếp theo
 
 Sơ đồ luồng tổng quan mà mình đã dựng lại từ quá trình phân tích tĩnh:
 
