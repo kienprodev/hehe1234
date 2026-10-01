@@ -269,18 +269,7 @@ Theo chuẩn **NIST SP 800-83 Rev. 1**:
 
 ---
 
-## PHẦN 5: DANH MỤC TÀI LIỆU THAM KHẢO CHÍNH THỐNG
-
-1. **NIST SP 800-83 Rev. 1:** *Guide to Malware Incident Prevention and Handling for Desktops and Laptops.* National Institute of Standards and Technology.
-2. **CISA & FBI Cybersecurity Advisories (2023 - 2024):**
-   - Advisory AA24-038a: *PRC State-Sponsored Actors (Volt Typhoon) Compromise SOHO Routers.*
-   - Operation Duck Hunt: *Multinational Action to Disrupt Qakbot Botnet.*
-   - Operation Cronos: *Disruption of LockBit Ransomware Group.*
-3. **Microsoft Defender Threat Intelligence Research (2023 - 2024):**
-   - *Raspberry Robin worm continues to evolve and deploy high-profile payloads.*
-   - *Guidance for investigating attacks using the BlackLotus UEFI bootkit.*
-4. **Mandiant (Google Cloud) Threat Intelligence:**
-   - *M-Trends 2024 Report: In-depth metrics on modern Infostealers and Ransomware tactics.*
+ tactics.*
 5. **ESET Research Whitepapers:**
    - *BlackLotus UEFI Bootkit: Bypassing Secure Boot.*
 6. **BlackBerry & Outpost24 Threat Research:**
