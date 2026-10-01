@@ -4,7 +4,7 @@
 ---
 
 
-## PHẦN 1: KHÁI NIỆM & BẢN CHẤT CỦA MALWARE (10 điểm)
+## PHẦN 1: KHÁI NIỆM & BẢN CHẤT CỦA MALWARE 
 
 ### 1.1. Định nghĩa Malware
 **Malware** (viết tắt của **Malicious Software** - phần mềm độc hại) là thuật ngữ kỹ thuật chỉ bất kỳ mã chương trình, script hoặc phần mềm nào được tạo ra với chủ đích xâm phạm tính bảo mật (**Confidentiality**), tính toàn vẹn (**Integrity**), hoặc tính sẵn sàng (**Availability**) của hệ thống máy tính, mạng hoặc thiết bị của người dùng mà không có sự cho phép.
