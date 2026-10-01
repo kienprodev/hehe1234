@@ -3,35 +3,12 @@
 
 ---
 
-## MỤC LỤC
-
-1. [Phần 1: Khái niệm & Bản chất của Malware](#phần-1-khái-niệm--bản-chất-của-malware)
-   - 1.1. Định nghĩa Malware
-   - 1.2. Mục đích và động cơ tồn tại
-   - 1.3. Phân biệt Malware với các khái niệm liên quan (Bug, Grayware/PUA, Exploit)
-2. [Phần 2 & 3: Phân tích 10 nhóm mã độc & Các Case Study mới nhất (2023 - 2024+)](#phần-2--3-phân-tích-10-nhóm-mã-độc--các-case-study-mới-nhất-2023---2024)
-   - 2.1. Virus (Mẫu mới: Win32.Neshta)
-   - 2.2. Worm (Mẫu mới: Raspberry Robin)
-   - 2.3. Trojan (Mẫu mới: Qakbot / Operation Duck Hunt)
-   - 2.4. Backdoor / RAT (Mẫu mới: AsyncRAT & Sliver C2)
-   - 2.5. Adware (Mẫu mới: Badbox & ViperSoftX)
-   - 2.6. Botnet (Mẫu mới: KV-Botnet / Volt Typhoon)
-   - 2.7. Ransomware (Mẫu mới: LockBit 3.0 / Operation Cronos)
-   - 2.8. Information Stealer (Mẫu mới: Lumma Stealer / LummaC2)
-   - 2.9. Rootkit (Mẫu mới: BlackLotus UEFI Bootkit)
-   - 2.10. Dropper / Loader (Mẫu mới: GootLoader)
-3. [Phần 4: Ma trận so sánh & Nhận diện phân loại cập nhật](#phần-4-ma-trận-so-sánh--nhận-diện-phân-loại-cập-nhật)
-4. [Phần 5: Danh mục tài liệu tham khảo chính thống](#phần-5-danh-mục-tài-liệu-tham-khảo-chính-thống)
-
----
 
 ## PHẦN 1: KHÁI NIỆM & BẢN CHẤT CỦA MALWARE (10 điểm)
 
 ### 1.1. Định nghĩa Malware
 **Malware** (viết tắt của **Malicious Software** - phần mềm độc hại) là thuật ngữ kỹ thuật chỉ bất kỳ mã chương trình, script hoặc phần mềm nào được tạo ra với chủ đích xâm phạm tính bảo mật (**Confidentiality**), tính toàn vẹn (**Integrity**), hoặc tính sẵn sàng (**Availability**) của hệ thống máy tính, mạng hoặc thiết bị của người dùng mà không có sự cho phép.
 
-Theo chuẩn **NIST SP 800-83 Rev. 1**:
-> *"Malware is a program that is covertly inserted into another program with the intent to destroy data, run destructive or intrusive programs, or otherwise compromise the confidentiality, integrity, or availability of the victim's data, applications, or operating system."*
 
 ### 1.2. Mục đích và động cơ tồn tại
 - **Kiếm tiền phi pháp (Cybercrime as a Service - CaaS):** Tống tiền bằng mã hóa dữ liệu (Ransomware-as-a-Service), đánh cắp tài khoản ngân hàng và ví tiền số (Stealer-as-a-Service).
