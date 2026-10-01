@@ -780,6 +780,7 @@ Qua toàn bộ quá trình phân tích tĩnh, ta có thể kết luận chắc c
 3. **Dọn dẹp trên Google Search Console:**
    - Đăng nhập Search Console, vào mục Cài đặt →\rightarrow→ Người dùng và quyền hạn, xóa ngay tài khoản xác minh qua file `google84d162603ffc785f.html`.
    - Submit lại file `sitemap.xml` chuẩn và yêu cầu Google re-index để xóa các URL rác.
+
 ## Mẫu 2: Phân tích mẫu mã độc APT Cycldek / HDoor Backdoor (cleanmgr.exe Memory Dump & Payload XBoxBody.dll)
 
 ### 2.2.1. Thông tin định danh & Bối cảnh thu thập mẫu (Dump Triage)
@@ -787,23 +788,20 @@ Qua toàn bộ quá trình phân tích tĩnh, ta có thể kết luận chắc c
 Trong kịch bản điều tra thứ hai, đối tượng phân tích không phải là một tệp thực thi độc lập đơn thuần trên đĩa, mà là một tệp **kết xuất toàn bộ bộ nhớ (Full Process Memory Dump)** được trích xuất từ một máy trạm Windows nghi vấn bị xâm nhập trong mạng nội bộ:
 
 - **Tệp tin phân tích:** `cleanmgr.exe_241124_222256.dmp`
-- **Kích thước tệp:** 68,257,079 bytes (~65.1 MB)
 - **Định dạng tệp:** `Windows Minidump / Userdump (Magic: 'MDMP', Header Version: 0xa061a793)`
 - **Thời điểm trích xuất:** `2024-11-24 22:22:56 UTC`
 - **Mã băm MD5:** `f13a9fbd8e30fc86f4cd685d412e9be0`
 - **Mã băm SHA-256:** `b1548b6f11b5137b364878176a8ee10d5cc398e530eab306439efb7c5a3613fa`
 
 ```text
-+---------------------------------------------------------------------------------------------------+
-|                        BỐI CẢNH THU THẬP MẪU BỘ NHỚ (DUMP TRIAGE CONTEXT)                         |
-+---------------------------------------------------------------------------------------------------+
-|  Công cụ trích xuất  : procdump64.exe -ma 200 (PID: 200)                                         |
-|  Tiến trình đích     : C:\Windows\SysWOW64\cleanmgr.exe (Windows Disk Space Cleanup Tool)       |
-|  Kiến trúc thực thi  : 32-bit x86 (chạy dưới subsystem WOW64 trên Windows 64-bit)                 |
-|  Dấu hiệu bất thường : cleanmgr.exe (tiện ích dọn rác đĩa) nhưng tải wininet.dll, winhttp.dll,   |
-|                        ws2_32.dll và duy trì kết nối mạng ra ngoài Internet.                      |
-+---------------------------------------------------------------------------------------------------+
-```
+Sau khi trích xuất bằng  procdump64.exe -ma 200 (PID: 200) ta có                                        
+  Tiến trình đích     : C:\Windows\SysWOW64\cleanmgr.exe (Windows Disk Space Cleanup Tool)       
+  Kiến trúc thực thi  : 32-bit x86 (chạy dưới subsystem WOW64 trên Windows 64-bit)                 
+ Dấu hiệu bất thường : cleanmgr.exe (tiện ích dọn rác đĩa) nhưng tải wininet.dll, winhttp.dll,   
+                       ws2_32.dll và duy trì kết nối mạng ra ngoài Internet.                      
+<img width="1881" height="817" alt="image" src="https://github.com/user-attachments/assets/8fb5bc0c-8061-4bb4-835c-524061ef2218" />
+<img width="1890" height="712" alt="image" src="https://github.com/user-attachments/assets/d0c2038e-5901-4a1d-b911-45ae8a99154d" />
+ **Dấu hiệu bất thường** : cleanmgr.exe (tiện ích dọn rác đĩa) nhưng tải wininet.dll, winhttp.dll,ws2_32.dll và duy trì kết nối mạng ra ngoài Internet.   
 
 Khi đọc trường `CommentStreamW` (Stream ID 11) của tệp dump, ta thu được thông tin gốc do chuyên gia phản ứng sự cố ghi nhận khi bắt giữ tiến trình:
 ```text
@@ -1035,6 +1033,7 @@ Tại vùng nhớ heap động của tiến trình, ta phát hiện một cấu 
 | 2 | `air.thaovanhoakh.com` | **80** | **HTTP tiêu chuẩn** | Kênh liên lạc web thông thường |
 | 3 | `air.thaovanhoakh.com` | **88** | **Kerberos Authentication** | Ngụy trang cổng xác thực miền Windows để tránh bị để ý |
 | 4 | `air.thaovanhoakh.com` | **8080** | **HTTP Alternate / Proxy** | Kênh dự phòng thứ hai |
+<img width="1911" height="1023" alt="image" src="https://github.com/user-attachments/assets/4b3a2224-d0e0-4162-98e2-c3f0e5fe2e2f" />
 
 ```text
 Trích xuất khối bộ nhớ thô tại offset 0x6d0500:
