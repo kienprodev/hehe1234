@@ -808,6 +808,8 @@ Khi đọc trường `CommentStreamW` (Stream ID 11) của tệp dump, ta thu đ
 *** procdump64.exe -ma 200
 *** Manual dump
 ```
+<img width="1890" height="840" alt="image" src="https://github.com/user-attachments/assets/632dee69-0f67-4ba6-b5c0-9e31ebdf4130" />
+<img width="1889" height="780" alt="image" src="https://github.com/user-attachments/assets/0e97b33c-d112-45a2-aa68-f2bd16fe8048" />
 
 #### Vấn đề an ninh trọng tâm đặt ra:
 Tiện ích `cleanmgr.exe` (Windows Disk Space Cleanup Manager) là một công cụ hệ thống hợp pháp có sẵn của Microsoft, chỉ có nhiệm vụ quét và xóa các tệp rác, file tạm, cache trình duyệt trên ổ đĩa. Nó **hoàn toàn không có bất kỳ lý do kỹ thuật nào để nạp các thư viện mạng (`wininet.dll`, `winhttp.dll`), tạo Socket kết nối ra ngoài Internet, hay thu thập dữ liệu người dùng**.
@@ -835,6 +837,7 @@ flowchart TD
     C --> I["Bộ nhớ Heap (Base 0x4d40000 / 0x18e35e7)"]
     I --> J["File Video AVI quay lén màn hình (10.5 MB)<br/>Hàng loạt ảnh chụp Desktop PNG"]
 ```
+<img width="1152" height="111" alt="image" src="https://github.com/user-attachments/assets/bc1a9289-fee3-4145-8dbf-169814c21e06" />
 
 #### 1. Phát hiện thư viện PE ẩn tại địa chỉ `0x10000000`:
 - Vùng nhớ từ `0x10000000` đến `0x10049000` mang cờ bảo vệ `PAGE_EXECUTE_READ` và thuộc loại `MEM_PRIVATE`.
@@ -844,6 +847,7 @@ flowchart TD
   - Phân vùng `.data`: RVA `0x40000`, Virtual Size `0x2200` bytes (Biến toàn cục)
   - Phân vùng `.rsrc`: RVA `0x47000`, Virtual Size `0x200` bytes
   - Phân vùng `.reloc`: RVA `0x48000`, Virtual Size `0x7800` bytes
+    <img width="625" height="73" alt="image" src="https://github.com/user-attachments/assets/21503355-3787-4232-95b1-b819fe99bf47" />
 - Khi đối chiếu với `ModuleListStream` (danh sách DLL chính thức do Windows Loader quản lý trong PEB), **hoàn toàn không có bất kỳ module nào được ghi nhận tại địa chỉ `0x10000000`**.
 - => **Kết luận:** Đây là một module độc hại được tiêm phản xạ (**Reflective DLL Injection**) hoặc bung mã trực tiếp trên RAM, không nạp qua API chuẩn `LoadLibrary` để tránh bị phát hiện.
 
