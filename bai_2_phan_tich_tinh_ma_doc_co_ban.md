@@ -1,73 +1,16 @@
-# BÁO CÁO KỸ THUẬT: PHÂN TÍCH TĨNH MÃ ĐỘC CƠ BẢN (BASIC STATIC MALWARE ANALYSIS)
+# BÁO CÁO KỸ THUẬT: PHÂN TÍCH TĨNH MÃ ĐỘC CƠ BẢN 
 
-- **Học phần:** Phân tích Mã độc (Malware Analysis)
-- **Giảng viên hướng dẫn:** Vương Lê
-- **Thời hạn:** 1 tuần | **Thang điểm:** 100 điểm
-- **Mục tiêu hoàn thành:**
-  - Nắm vững và đọc hiểu kiến trúc tệp thực thi PE (Portable Executable) trên Windows.
-  - Thành thạo bộ công cụ phân tích tĩnh tiêu chuẩn công nghiệp (*Exeinfo PE, PEStudio, Strings, CFF Explorer, Detect It Easy, FLOSS*).
-  - Trích xuất toàn diện các chỉ số thỏa hiệp sơ bộ (IOCs - Hashes, C2 Domains/IPs, Registry, File Paths, Suspicious Strings).
-  - Đánh giá mức độ rủi ro, phân loại họ mã độc và dự đoán hành vi nguy hại mà **không cần thực thi tệp** trong môi trường động.
+# PHẦN 1: LÝ THUYẾT NỀN TẢNG 
 
----
-
-## MỤC LỤC
-
-1. [PHẦN 1: LÝ THUYẾT NỀN TẢNG (40 ĐIỂM)](#phần-1-lý-thuyết-nền-tảng-40-điểm)
-   - [1.1. Bản chất & Cơ chế Phân tích Tĩnh (Static Analysis) (10đ)](#11-bản-chất--cơ-chế-phân-tích-tĩnh-static-analysis-10đ)
-     - 1.1.1. Định nghĩa kỹ thuật
-     - 1.1.2. Mục đích cốt lõi
-     - 1.1.3. Ưu điểm nổi bật
-     - 1.1.4. Hạn chế và thách thức kỹ thuật
-     - 1.1.5. So sánh toàn diện: Static Analysis vs. Dynamic Analysis
-   - [1.2. Nghiên cứu & Ứng dụng Bộ Công cụ Phân tích Tĩnh (20đ)](#12-nghiên-cứu--ứng-dụng-bộ-công-cụ-phân-tích-tĩnh-20đ)
-     - 1.2.1. Exeinfo PE (Phát hiện Packer, Obfuscation & Compiler)
-     - 1.2.2. PEStudio (Đánh giá chỉ số rủi ro & Tự động đối chiếu MITRE ATT&CK)
-     - 1.2.3. Strings & FLOSS (Trích xuất chuỗi thô & Giải mã Stack Strings)
-     - 1.2.4. CFF Explorer (Kiểm tra sâu cấu trúc PE & Chỉnh sửa PE Header)
-     - 1.2.5. Công cụ bổ trợ đề xuất: Detect It Easy (DIE) & Capa
-   - [1.3. Các Dữ liệu Trọng yếu Cần Quan tâm Khi Phân tích Tĩnh Tệp PE (10đ)](#13-các-dữ-liệu-trọng-yếu-cần-quan-tâm-khi-phân-tích-tĩnh-tệp-pe-10đ)
-     - 1.3.1. Giá trị Băm & Nhận dạng (MD5, SHA256, Imphash, SSDEEP)
-     - 1.3.2. Cấu trúc PE Headers (DOS Header, File Header, Optional Header, Subsystem)
-     - 1.3.3. Các phân vùng (Sections), Entropy & Tỷ lệ Virtual Size / Raw Size
-     - 1.3.4. Bảng hàm nhập (Import Address Table - IAT) & Các Windows API nguy hiểm
-     - 1.3.5. Bảng hàm xuất (Export Address Table - EAT)
-     - 1.3.6. Tài nguyên nhúng (Resources - `.rsrc`) & Dữ liệu nối đuôi (Overlay)
-     - 1.3.7. Điểm gọi ngầm (TLS Callbacks) & Chữ ký số (Digital Certificate)
-2. [PHẦN 2: THỰC HÀNH PHÂN TÍCH MẪU MÃ ĐỘC THỰC TẾ (60 ĐIỂM)](#phần-2-thực-hành-phân-tích-mẫu-mã-độc-thực-tế-60-điểm)
-   - [2.1. Quy trình Phân tích Tĩnh Chuẩn 5 Bước (SOP)](#21-quy-trình-phân-tích-tĩnh-chuẩn-5-bước-sop)
-   - [2.2. Mẫu Phân Tích 01: Ransomware WannaCry (Mssecsvc.exe Dropper) (30đ)](#22-mẫu-phân-tích-01-ransomware-wannacry-mssecsvcexe-dropper-30đ)
-     - 2.2.1. Thông tin định danh & Metadata
-     - 2.2.2. Đánh giá Đóng gói (Packer) & Entropy Phân vùng
-     - 2.2.3. Phân tích Các API đáng ngờ (Suspicious APIs / IAT)
-     - 2.2.4. Trích xuất Chuỗi (Strings) & IOCs sơ bộ
-     - 2.2.5. Dấu hiệu Persistence & Cơ chế Phán đoán Hành vi
-     - 2.2.6. Kết luận & Đánh giá Rủi ro
-   - [2.3. Mẫu Phân Tích 02: Trojan Stealer / RAT (RedLine Stealer Payload) (30đ)](#23-mẫu-phân-tích-02-trojan-stealer--rat-redline-stealer-payload-30đ)
-     - 2.3.1. Thông tin định danh & Metadata
-     - 2.3.2. Đánh giá Đóng gói & Trình biên dịch (.NET / ConfuserEx)
-     - 2.3.3. Phân tích Các API & Phương thức độc hại
-     - 2.3.4. Trích xuất Chuỗi (Strings, C2 Server, Regex thu thập dữ liệu)
-     - 2.3.5. Dấu hiệu Persistence & Evasion
-     - 2.3.6. Kết luận & Đánh giá Rủi ro
-   - [2.4. Khung Biểu Mẫu Báo Cáo Chuẩn (Standard Report Template)](#24-khung-biểu-mẫu-báo-cáo-chuẩn-standard-report-template)
-3. [TỔNG KẾT & TÀI LIỆU THAM KHẢO](#tổng-kết--tài-liệu-tham-khảo)
-
----
-
-# PHẦN 1: LÝ THUYẾT NỀN TẢNG (40 ĐIỂM)
-
-## 1.1. Bản chất & Cơ chế Phân tích Tĩnh (Static Analysis) (10đ)
+## 1.1. Bản chất & Cơ chế Phân tích Tĩnh (Static Analysis)
 
 ### 1.1.1. Định nghĩa kỹ thuật
 **Phân tích tĩnh mã độc (Static Malware Analysis)** là phương pháp kiểm tra, mổ xẻ cấu trúc nhị phân, mã máy, siêu dữ liệu (metadata), và tài nguyên của một tệp tin đáng ngờ **mà hoàn toàn không thực thi (không kích hoạt chạy)** tệp đó trên hệ điều hành.
 
 Quá trình này bao gồm việc đọc các trường trong tiêu đề tệp (headers), tính toán chữ ký số và mã băm mật mã (cryptographic hashes), trích xuất chuỗi ký tự (strings), phân tích bảng hàm nhập/xuất (imports/exports), và dịch ngược mã máy (disassembly/decompilation) thành Assembly hoặc mã nguồn bậc cao (C, C#, Java).
 
-
-
 ### 1.1.2. Mục đích cốt lõi
-1. **Xác định tính chất tệp (Triage & Categorization):** Phân loại nhanh tệp nghi vấn là lành tính (Benign), phần mềm quảng cáo/không mong muốn (PUA/Adware), hay mã độc nguy hiểm (Ransomware, Trojan, Rootkit).
+1. **Xác định tính chất tệp (Triage & Categorization):** Phân loại nhanh tệp nghi vấn là lành tính , phần mềm quảng cáo/không mong muốn (PUA/Adware), hay mã độc nguy hiểm (Ransomware, Trojan, Rootkit).
 2. **Thu thập Chỉ số Thỏa hiệp sơ bộ (Initial Indicators of Compromise - IOCs):** Trích xuất nhanh các địa chỉ IP, C2 Domain, URL tải payload, tên tiến trình mục tiêu, khóa Registry hoặc tên Mutex mà mã độc chuẩn bị sử dụng.
 3. **Phát hiện Kỹ thuật Che giấu (Packer / Obfuscation Detection):** Kiểm tra xem mẫu nhị phân có bị nén (packed), bảo vệ bằng máy ảo (VMProtect/Themida), hay mã hóa payload bên trong không để lựa chọn chiến lược giải nén (unpacking) phù hợp.
 4. **Định hướng cho Phân tích Động & Dịch ngược Chuyên sâu:** Khoanh vùng các hàm API nguy hiểm (như `VirtualAllocEx`, `WriteProcessMemory`, `CreateRemoteThread`) để đặt sẵn Breakpoint chính xác khi đưa vào Debugger (x64dbg/x32dbg).
