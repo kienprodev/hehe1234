@@ -850,6 +850,8 @@ flowchart TD
     <img width="625" height="73" alt="image" src="https://github.com/user-attachments/assets/21503355-3787-4232-95b1-b819fe99bf47" />
 - Khi đối chiếu với `ModuleListStream` (danh sách DLL chính thức do Windows Loader quản lý trong PEB), **hoàn toàn không có bất kỳ module nào được ghi nhận tại địa chỉ `0x10000000`**.
 - => **Kết luận:** Đây là một module độc hại được tiêm phản xạ (**Reflective DLL Injection**) hoặc bung mã trực tiếp trên RAM, không nạp qua API chuẩn `LoadLibrary` để tránh bị phát hiện.
+<img width="1919" height="620" alt="image" src="https://github.com/user-attachments/assets/00bb24a4-9843-43d2-9148-dff665d13bfa" />
+
 
 #### 2. Trích xuất và định danh Module nhúng (`XBoxBody.dll`):
 Trích xuất khối nhị phân này ra đĩa tại offset `0x00db3537` trong tệp dump (tên file trích xuất: `cleanmgr.exe_241124_222256.dmp.00db3537_00048c00.dll`), ta thu được siêu dữ liệu nhị phân nguyên bản:
@@ -866,8 +868,8 @@ Trích xuất khối nhị phân này ra đĩa tại offset `0x00db3537` trong t
 
 Khi dịch ngược mã máy của `XBoxBody.dll` tại cụm hàm khởi tạo từ `0x100027e0` đến `0x1000287b`, ta khám phá kỹ thuật đánh cắp và nâng quyền Access Token cực kỳ tinh vi của kẻ tấn công:
 
-```c
-// Đoạn mã giả dịch ngược thuật toán nâng quyền Token tại 0x100027e0:
+```
+// Đoạn mã giả dịch ngược thuật toán nâng quyền Token :
 BOOL EscalateAndImpersonateToken()
 {
     HANDLE hProcess;
@@ -879,7 +881,8 @@ BOOL EscalateAndImpersonateToken()
     // 1. Mở tiến trình mục tiêu với quyền truy vấn thông tin
     hProcess = OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, targetPid); // 0x400
     if (!hProcess) return FALSE;
-
+    -> đặt giá trị của open process là false để không truyền handle xuống các tiến trình con nào
+    vì mục tiêu của nó chỉ là lấy token đặc quyền
     // 2. Mở Token của tiến trình mục tiêu với toàn quyền
     if (!OpenProcessToken(hProcess, TOKEN_ALL_ACCESS, &hToken)) { // 0xF00FF
         CloseHandle(hProcess);
@@ -893,6 +896,8 @@ BOOL EscalateAndImpersonateToken()
         // Nếu không có Token liên kết, nhân bản trực tiếp Primary Token
         DuplicateTokenEx(hToken, MAXIMUM_ALLOWED, NULL, SecurityImpersonation, TokenPrimary, &hLinkedToken);
     }
+    -> nếu nó tìm thấy elevated token thì thành công nếu không thì nó sẽ tự động nhân bản trực tiếp primary token để
+    khởi tạo enviroment block
 
     // 4. Tạo khối môi trường (Environment Block) cho tài khoản đặc quyền
     if (hLinkedToken) {
@@ -922,7 +927,7 @@ Mã máy Assembly tương ứng tại 0x100027e6:
 ```
 
 **Bản chất kỹ thuật:**
-Khi Windows bật cơ chế UAC (User Account Control), một tài khoản thuộc nhóm Administrators khi đăng nhập sẽ được cấp 2 Token: một Filtered Token (bị tước quyền Admin để chạy app thường) và một Elevated Token (chứa đầy đủ đặc quyền quản trị).
+Khi Windows bật cơ chế UAC, một tài khoản thuộc nhóm admin khi đăng nhập sẽ được cấp 2 Token: một Filtered Token (bị tước quyền Admin để chạy app thường) và một Elevated Token (chứa đầy đủ đặc quyền quản trị).
 Bằng cách triệu gọi `GetTokenInformation` với chỉ số `0x13` (`TokenLinkedToken`), mã độc đã **rút trích thành công Token quản trị ẩn** của phiên người dùng, sau đó nhân bản bằng `DuplicateTokenEx` và tạo sẵn môi trường thực thi để chuẩn bị tạo một tiến trình mới với toàn quyền hệ thống mà không hề kích hoạt hộp thoại cảnh báo UAC trên màn hình!
 
 ---
@@ -930,27 +935,6 @@ Bằng cách triệu gọi `GetTokenInformation` với chỉ số `0x13` (`Token
 ### 2.2.4. Kỹ thuật Tiêm mã Process Hollowing vào LOLBin (cleanmgr.exe)
 
 Ngay sau khi có được Token đặc quyền, mã độc bước vào giai đoạn thực thi kỹ thuật **Process Hollowing (Rỗng ruột tiến trình - MITRE T1055.012)** kinh điển:
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Attacker as Loader / Dropper
-    participant Victim as C:\Windows\SysWOW64\cleanmgr.exe
-    participant Memory as Không gian bộ nhớ cleanmgr.exe
-
-    Attacker->>Victim: CreateProcessAsUserW(..., CREATE_SUSPENDED)
-    Note over Victim: Tiến trình cleanmgr.exe được tạo nhưng ở trạng thái "đóng băng" (Suspended)
-    Attacker->>Victim: GetThreadContext(hThread, &Context)
-    Note over Attacker: Lưu lại trạng thái thanh ghi CPU (EIP, EBX, ESP)
-    Attacker->>Memory: VirtualAllocEx(..., PAGE_EXECUTE_READWRITE)
-    Note over Memory: Cấp phát vùng nhớ thực thi mới tại 0x10000000 / 0x30c0000
-    Attacker->>Memory: WriteProcessMemory(..., XBoxBody.dll / Payload)
-    Note over Memory: Ghi toàn bộ nội dung DLL độc hại vào bộ nhớ cleanmgr.exe
-    Attacker->>Victim: SetThreadContext(hThread, Context.Eip = RemoteBase)
-    Note over Victim: Tráo đổi con trỏ EIP trỏ tới điểm nhập mã độc thay vì cleanmgr gốc
-    Attacker->>Victim: ResumeThread(hThread)
-    Note over Victim: cleanmgr.exe thức giấc và bắt đầu chạy mã độc XBoxBody.dll ngầm!
-```
 
 #### Phân tích chi tiết từng bước Assembly từ `0x100028b5` đến `0x10002990`:
 1. **Khởi tạo tiến trình bị treo:**
@@ -1040,7 +1024,7 @@ Tại vùng nhớ heap động của tiến trình, ta phát hiện một cấu 
 <img width="1911" height="1023" alt="image" src="https://github.com/user-attachments/assets/4b3a2224-d0e0-4162-98e2-c3f0e5fe2e2f" />
 
 ```text
-Trích xuất khối bộ nhớ thô tại offset 0x6d0500:
+khi check hex 
 00000000: 50 00 00 00  00 00 61 69  72 2e 74 68  61 6f 76 61  |P.....air.thaova| -> Port 0x50 = 80
 00000010: 6e 68 6f 61  6b 68 2e 63  6f 6d 00 00  ee 13 01 20  |nhoakh.com......|
 00000020: 35 00 00 00  00 00 61 69  72 2e 74 68  61 6f 76 61  |5.....air.thaova| -> Port 0x35 = 53 (DNS)
@@ -1124,29 +1108,6 @@ mindmap
       Magic Header: 0xAABBCCDD
 ```
 
-#### 1. Bằng chứng quay quét màn hình người dùng (Video AVI dung lượng 10.5 MB):
-- Trong quá trình phân tích bộ nhớ dump, công cụ file carver đã bóc tách được một tệp video hoàn chỉnh:
-  - **Tên tệp:** `cleanmgr.exe_241124_222256.dmp.018e35e7_00a08517.avi`
-  - **Dung lượng:** **10,519,831 bytes (~10.03 MB)**
-  - **Header:** `RIFF....AVI ` (Chuẩn video container của Microsoft)
-- **Ý nghĩa điều tra:** Đây là một bằng chứng "biết nói" cực kỳ đắt giá! Khác với các mã độc thương mại thông thường chỉ chụp ảnh tĩnh, dòng mã độc APT này có khả năng kích hoạt cơ chế **quay lén màn hình desktop liên tục và đóng gói thành file video AVI** ngay trong bộ nhớ trước khi nén để gửi về máy chủ C2, nhằm nắm bắt toàn bộ thao tác soạn thảo văn bản, mở email và truy cập tài liệu mật của nạn nhân.
-
-#### 2. Bằng chứng chụp ảnh màn hình tĩnh (PNG Images):
-Carving bộ nhớ thu được hàng loạt tệp ảnh PNG:
-- `cleanmgr.exe_241124_222256.dmp.0004bf7f_a3bc.png` (41,916 bytes)
-- `cleanmgr.exe_241124_222256.dmp.0141e33f_ea04.png` (59,908 bytes)
-- `cleanmgr.exe_241124_222256.dmp.000331f7_34e7.png` (13,543 bytes)
-- Cơ chế thực hiện thông qua các Windows GDI APIs: `CreateDCW`, `CreateCompatibleDC`, `CreateCompatibleBitmap`, `BitBlt` chụp toàn bộ không gian màn hình chính (`GetDC(NULL)`).
-
-#### 3. Bắt phím bấm (Keylogging):
-- Thư viện import hàm `SetWindowsHookExW` với mã hook bàn phím mức thấp (`WH_KEYBOARD_LL = 13`).
-- Kết hợp `GetKeyState`, `CallNextHookEx` và `UnhookWindowsHookEx` để ghi lại mọi mật khẩu, thông tin đăng nhập và lưu vào bộ đệm mã hóa.
-
-#### 4. Khởi tạo Reverse Shell tương tác từ xa:
-- Thư viện import `CreatePipe`, `DuplicateHandle`, `SetStdHandle`.
-- Khi C2 gửi lệnh kích hoạt shell, mã độc tạo 2 Ống dẫn ẩn danh (Anonymous Pipes) nối trực tiếp ngõ vào/ngõ ra chuẩn (`STDIN`, `STDOUT`, `STDERR`) với tiến trình `cmd.exe` thông qua `CreateProcessW`, cho phép kẻ tấn công thực thi lệnh dòng lệnh trực tiếp trên máy nạn nhân.
-
----
 
 ### 2.2.8. Cơ chế Bám rễ (Persistence Service WindowsUpdate) & Tệp SilverlightMSI.dat
 
@@ -1255,39 +1216,4 @@ rule APT_Cycldek_HDoor_XBoxBody_Memory {
 }
 ```
 
-#### 3. Quy trình Ứng phó & Khuyến nghị Kỹ thuật (Incident Response):
-1. **Cô lập Host & Chặn kết nối mạng:**
-   - Ngay lập tức cấu hình Firewall/Proxy chặn đứng toàn bộ lưu lượng ra vào tên miền `air.thaovanhoakh.com` và địa chỉ IP phân giải của nó trên tất cả các cổng, đặc biệt là **Cổng 53 (DNS)**, 80, 88, 8080.
-2. **Truy tìm và vô hiệu hóa Service độc hại:**
-   - Mở PowerShell quyền Administrator:
-     ```powershell
-     Stop-Service -Name "WindowsUpdate" -Force -ErrorAction SilentlyContinue
-     sc.exe delete "WindowsUpdate"
-     ```
-   - Xóa bỏ khóa Registry tương ứng:
-     ```cmd
-     reg delete "HKLM\SYSTEM\CurrentControlSet\Services\WindowsUpdate" /f
-     ```
-3. **Quét tìm và tiêu diệt tệp Payload:**
-   - Rà soát toàn bộ các phân vùng ổ đĩa tìm tệp `SilverlightMSI.dat` và các tệp DLL lạ được đặt cùng thư mục để xóa bỏ vĩnh viễn.
-4. **Cảnh báo giám sát Endpoint (EDR/SIEM Rule):**
-   - Thiết lập cảnh báo SOC theo dõi sự kiện **Sysmon Event ID 1 (Process Create)** và **Event ID 8 (CreateRemoteThread) / Event ID 10 (ProcessAccess)**:
-     - Báo động đỏ khi bất kỳ tiến trình hệ thống nào như `cleanmgr.exe`, `calc.exe`, `notepad.exe` khởi tạo kết nối mạng ra ngoài Internet (Network Connection).
-     - Báo động khi `cleanmgr.exe` được khởi tạo dưới cờ `CREATE_SUSPENDED` bởi một tiến trình không thuộc quyền quản lý của Task Scheduler (`taskhostw.exe`).
-
----
-
-# TỔNG KẾT & BÀI HỌC KINH NGHIỆM
-
-Qua quá trình thực hiện bài tập thực hành phân tích tĩnh nâng cao trên hai mẫu mã độc thực tế, học viên đã đạt được các kết quả kỹ thuật cốt lõi:
-
-1. **Với Mẫu 01 (IIS Blackhat SEO Cloaking Module):**
-   - Đã làm chủ kỹ thuật nhận diện và gỡ gói (Unpacking) UPX trên tệp PE 64-bit.
-   - Thấu hiểu cơ chế hoạt động của một **Native HTTP Module trên máy chủ web IIS**, nhận diện kỹ thuật Cloaking ngụy trang giữa Googlebot và người dùng thật nhằm trục lợi tối ưu hóa tìm kiếm (SEO Poisoning).
-
-2. **Với Mẫu 02 (APT Cycldek / Custom HDoor Memory Dump):**
-   - Nâng cao kỹ năng phân tích từ file thực thi tĩnh sang kỹ thuật **Khai quật bộ nhớ (Memory Carving)** và mổ xẻ cấu trúc tiến trình bị tiêm mã.
-   - Giải mã thành công kỹ thuật trốn thoát tinh vi hàng đầu hiện nay: kết hợp **Bẻ khóa UAC / Token Impersonation** với **Process Hollowing** vào công cụ hệ thống hợp pháp (`cleanmgr.exe`).
-   - Bóc tách toàn diện hạ tầng C2 luồn lách qua cổng DNS (Port 53), quy gán chính xác nhóm tin tặc **Cycldek (Goblin Panda)** nhắm vào các cơ quan tại Việt Nam, và thu thập được bằng chứng video quay lén màn hình desktop (10.5 MB AVI) phục vụ công tác điều tra số (Digital Forensics).
-
-Báo cáo đã cung cấp đầy đủ các chỉ số IOC, quy tắc YARA nhận diện và phương án phản ứng sự cố toàn diện, đáp ứng hoàn hảo yêu cầu học phần Phân tích Mã độc.
+ủ các chỉ số IOC, quy tắc YARA nhận diện và phương án phản ứng sự cố toàn diện, đáp ứng hoàn hảo yêu cầu học phần Phân tích Mã độc.
