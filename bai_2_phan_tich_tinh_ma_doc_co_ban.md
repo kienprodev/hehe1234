@@ -528,7 +528,7 @@ flowchart TD
 
 ### Phân tích chi tiết mã giả & Bản chất kỹ thuật
 
-Đoạn này cực kỳ thú vị và "bánh cuốn" này anh em: sau khi dịch ngược bằng IDA, ta thấy con DLL này không phải là một file thực thi hay trojan bình thường, mà bản chất của nó là một **Native HTTP Module của máy chủ web Microsoft IIS**!
+Đoạn này trông khá thu vị: sau khi dịch ngược bằng IDA, ta thấy con DLL này không phải là một file thực thi hay trojan bình thường, mà bản chất của nó là một **Native HTTP Module của máy chủ web Microsoft IIS**!
 
 #### 1. Cơ chế đăng ký vào IIS: Hàm `RegisterModule` & `MyHttpModuleFactory`
 
