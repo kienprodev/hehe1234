@@ -1,75 +1,9 @@
+
 # BÁO CÁO KỸ THUẬT: PHÂN TÍCH VÀ XÂY DỰNG CƠ CHẾ PERSISTENCE TRÊN HỆ ĐIỀU HÀNH WINDOWS
 
-- **Học phần:** Phân tích Mã độc (Malware Analysis)
-- **Giảng viên hướng dẫn:** Vương Lê
-- **Thời hạn:** 1 tuần | **Thang điểm:** 100 điểm
-- **Chủ đề:** Bài 3. Phân tích / Tạo Persistence cho mã độc (Malware Persistence Mechanisms & Analysis)
-- **Mục tiêu hoàn thành:**
-  - Nắm vững bản chất, vai trò và vị trí của kỹ thuật Persistence (Duy trì sự hiện diện) trong chuỗi tấn công mạng (Cyber Kill Chain / MITRE ATT&CK).
-  - Khảo sát toàn diện 12 nhóm Autostart Entry cốt lõi trong công cụ Sysinternals Autoruns, chỉ rõ vị trí Registry/Hệ thống và phương thức khai thác của mã độc.
-  - Phân tích chuyên sâu kỹ thuật Persistence nâng cao: **COM Hijacking** (Cơ chế phân giải CLSID, quyền hạn HKCU vs HKLM, tính chất ẩn nặc).
-  - Tự phát triển chương trình C/C++ PoC giáo dục minh họa 3 cơ chế tự cài đặt Persistence (Startup Folder, Registry Run Key, Task Scheduler) với payload an toàn (`MessageBox`).
-  - Xây dựng và thực nghiệm kỹ thuật **Image Hijack** thông qua Image File Execution Options (IFEO) với `sethc.exe` (Sticky Keys).
-  - Quy trình và biểu mẫu chuẩn phân tích, bóc tách kỹ thuật Persistence từ các mẫu mã độc thực tế.
+# PHẦN 1: LÝ THUYẾT NỀN TẢNG 
 
----
-
-## MỤC LỤC
-
-1. [PHẦN 1: LÝ THUYẾT NỀN TẢNG (30 ĐIỂM)](#phần-1-lý-thuyết-nền-tảng-30-điểm)
-   - [1.1. Tổng quan về Persistence trong Mã độc (1đ)](#11-tổng-quan-về-persistence-trong-mã-độc-1đ)
-     - 1.1.1. Định nghĩa Persistence
-     - 1.1.2. Vai trò trong vòng đời tấn công (MITRE ATT&CK TA0003)
-     - 1.1.3. Mục tiêu chiến lược của kẻ tấn công
-   - [1.2. Nghiên cứu 12 Nhóm Autostart Entry trong Sysinternals Autoruns (24đ)](#12-nghiên-cứu-12-nhóm-autostart-entry-trong-sysinternals-autoruns-24đ)
-     - 1.2.1. Nhóm 1: Logon
-     - 1.2.2. Nhóm 2: Explorer
-     - 1.2.3. Nhóm 3: Internet Explorer / Browser Helper Objects (BHO)
-     - 1.2.4. Nhóm 4: Scheduled Tasks
-     - 1.2.5. Nhóm 5: Services
-     - 1.2.6. Nhóm 6: Drivers
-     - 1.2.7. Nhóm 7: AppInit DLLs
-     - 1.2.8. Nhóm 8: Image Hijacks (IFEO)
-     - 1.2.9. Nhóm 9: Winlogon
-     - 1.2.10. Nhóm 10: Office Add-ins
-     - 1.2.11. Nhóm 11: KnownDLLs
-     - 1.2.12. Nhóm 12: WMI (Windows Management Instrumentation)
-     - 1.2.13. Bảng tổng hợp đối chiếu 12 nhóm Autostart
-   - [1.3. Kỹ thuật Persistence Nâng cao: COM Hijacking (5đ)](#13-kỹ-thuật-persistence-nâng-cao-com-hijacking-5đ)
-     - 1.3.1. Khái niệm COM (Component Object Model)
-     - 1.3.2. Định danh CLSID (Class Identifier)
-     - 1.3.3. Cơ chế tra cứu đối tượng COM trong Registry (HKCU vs HKLM)
-     - 1.3.4. Nguyên lý hoạt động của COM Hijacking
-     - 1.3.5. Vì sao COM Hijacking cực kỳ khó bị phát hiện?
-2. [PHẦN 2: THỰC HÀNH & TRIỂN KHAI KỸ THUẬT (70 ĐIỂM)](#phần-2-thực-hành--triển-khai-kỹ-thuật-70-điểm)
-   - [2.1. Tự phát triển Mã C/C++ Tạo Persistence (30đ)](#21-tự-phát-triển-mã-cc-tạo-persistence-30đ)
-     - 2.1.1. Thiết kế kiến trúc chương trình PoC an toàn
-     - 2.1.2. Cơ chế 1: Thư mục Startup (Startup Folder)
-     - 2.1.3. Cơ chế 2: Registry Run Key
-     - 2.1.4. Cơ chế 3: Lập lịch tác vụ (Task Scheduler)
-     - 2.1.5. Mã nguồn C/C++ hoàn chỉnh (`persistence_demo.cpp`)
-     - 2.1.6. Hướng dẫn biên dịch và kiểm chứng thực nghiệm
-     - 2.1.7. Quy trình dọn dẹp môi trường (Cleanup Routine)
-   - [2.2. Kỹ thuật Image Hijack với sethc.exe (Sticky Keys) (10đ)](#22-kỹ-thuật-image-hijack-với-sethcexe-sticky-keys-10đ)
-     - 2.2.1. Bản chất cơ chế IFEO Debugger
-     - 2.2.2. Các bước thiết lập Image Hijack cho `sethc.exe`
-     - 2.2.3. Thực nghiệm chứng minh: Kích hoạt Payload bằng 5 lần phím Shift
-     - 2.2.4. Nguy cơ bảo mật và đặc quyền `NT AUTHORITY\SYSTEM`
-     - 2.2.5. Hướng dẫn khắc phục và hoàn trả trạng thái mặc định
-   - [2.3. Phân tích Kỹ thuật Persistence trên Mẫu Mã độc Thực tế (30đ)](#23-phân-tích-kỹ-thuật-persistence-trên-mẫu-mã-độc-thực-tế-30đ)
-     - 2.3.1. Phương pháp luận & Quy trình phân tích Persistence động
-     - 2.3.2. Báo cáo phân tích Mẫu 01: Trojan Dropper / RAT (Registry Run Key Persistence)
-     - 2.3.3. Báo cáo phân tích Mẫu 02: Backdoor / Downloader (Scheduled Task Persistence)
-     - 2.3.4. Báo cáo phân tích Mẫu 03: Ransomware / Loader (Service Persistence)
-     - 2.3.5. Biểu mẫu chuẩn trích xuất IOC Persistence phục vụ Incident Response
-3. [TỔNG KẾT & KHUYẾN NGHỊ PHÒNG THỦ](#tổng-kết--khuyến-nghị-phòng-thủ)
-
----
-
-# PHẦN 1: LÝ THUYẾT NỀN TẢNG (30 ĐIỂM)
-
-## 1.1. Tổng quan về Persistence trong Mã độc (1đ)
-
+## 1.1. Tổng quan về Persistence trong Mã độc 
 ### 1.1.1. Định nghĩa Persistence
 Trong lĩnh vực an toàn thông tin và phân tích mã độc, **Persistence (Kỹ thuật duy trì sự hiện diện)** là tập hợp các phương thức, cơ chế và thủ thuật được kẻ tấn công sử dụng nhằm đảm bảo mã độc có thể **tự động khởi động lại và tiếp tục hoạt động** sau khi hệ thống gặp các biến cố gián đoạn như:
 - Khởi động lại hệ điều hành (System Reboot).
@@ -343,11 +277,11 @@ Kỹ thuật COM Hijacking (chiếm quyền điều khiển COM) hoạt động 
 
 ---
 
-# PHẦN 2: THỰC HÀNH & TRIỂN KHAI KỸ THUẬT (70 ĐIỂM)
+# PHẦN 2:
 
-## 2.1. Tự phát triển Mã C/C++ Tạo Persistence (30đ)
+## 2.1. Tự phát triển Mã C/C++ Tạo Persistence 
 
-### 2.1.1. Thiết kế kiến trúc chương trình PoC an toàn
+### 2.1.1. Thiết kế kiến trúc chương trình PoC
 Mục tiêu là xây dựng một tệp thực thi PE 32-bit hoặc 64-bit bằng C/C++ (`persistence_demo.exe`). 
 - Khi được thực thi lần đầu, chương trình sẽ tự động lấy đường dẫn tuyệt đối của chính nó thông qua hàm `GetModuleFileNameA()`.
 - Sao chép bản thân vào một vị trí lưu trữ giả lập mã độc an toàn (ví dụ: thư mục `%TEMP%` hoặc `%APPDATA%`).
@@ -359,16 +293,16 @@ Mục tiêu là xây dựng một tệp thực thi PE 32-bit hoặc 64-bit bằn
 
 ### 2.1.2. Phân tích chi tiết 3 cơ chế thực hiện
 
-#### Cơ chế 1: Thư mục Startup (10đ)
+#### Cơ chế 1: Thư mục Startup 
 - **API sử dụng:** `SHGetFolderPathA()` với hằng số `CSIDL_STARTUP` hoặc sử dụng biến môi trường `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup`.
 - **Thao tác:** Sao chép tệp thực thi hiện tại vào thư mục này bằng hàm `CopyFileA()`.
 
-#### Cơ chế 2: Registry Run Key (10đ)
+#### Cơ chế 2: Registry Run Key 
 - **API sử dụng:** `RegOpenKeyExA()`, `RegSetValueExA()`, `RegCloseKey()`.
 - **Đường dẫn Registry:** `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run`.
 - **Thao tác:** Tạo giá trị chuỗi (REG_SZ) với tên định danh `MalwareLabPersistenceDemo` chứa đường dẫn đầy đủ đến tệp exe.
 
-#### Cơ chế 3: Lập lịch tác vụ Task Scheduler (10đ)
+#### Cơ chế 3: Lập lịch tác vụ Task Scheduler 
 - **Phương thức:** Gọi API `CreateProcessA()` hoặc `WinExec()` thực thi tiện ích tích hợp sẵn của Windows `schtasks.exe`.
 - **Cú pháp lệnh:**
   ```cmd
@@ -379,226 +313,236 @@ Mục tiêu là xây dựng một tệp thực thi PE 32-bit hoặc 64-bit bằn
 ---
 
 ### 2.1.3. Mã nguồn C/C++ hoàn chỉnh (`persistence_demo.cpp`)
-
+Mã nguồn đối với cơ chế 1	"Thư mục Startup"
 ```cpp
-/**
- * ==============================================================================
- * BÀI TẬP THỰC HÀNH MALWARE ANALYSIS - LAB 03
- * Chủ đề: Xây dựng Cơ chế Persistence Minh họa Giáo dục (Benign PoC)
- * Tác giả: Học viên thực hiện
- * Giảng viên hướng dẫn: Vương Lê
- * ==============================================================================
- * CẢNH BÁO: Mã nguồn được xây dựng thuần túy cho mục đích nghiên cứu học thuật 
- * và kiểm thử an toàn thông tin trong môi trường phòng thí nghiệm có kiểm soát.
- * ==============================================================================
- */
-
 #include <windows.h>
 #include <shlobj.h>
-#include <stdio.h>
-#include <string.h>
+#include <string>
 
-// Hàm hiển thị thông báo Payload kiểm chứng
-void TriggerPayloadNotification(const char* mechanismName) {
-    char message[512];
-    snprintf(message, sizeof(message), 
-        "[LAB DEMO - AN TOÀN]\n\n"
-        "Cơ chế Persistence: %s\n"
-        "Tiến trình đang chạy từ: \n%s\n\n"
-        "Xác nhận: Hệ thống đã tự động kích hoạt mã thực thi thành công!",
-        mechanismName, __argv[0]);
-    
-    MessageBoxA(NULL, message, "Malware Persistence Lab - Verification", MB_OK | MB_ICONINFORMATION);
+using namespace std;
+
+bool hehe()
+{
+    wchar_t startup[MAX_PATH];
+
+    // 1. Lấy đường dẫn Startup Folder
+    if (FAILED(SHGetFolderPathW(
+        NULL,
+        CSIDL_STARTUP,
+        NULL,
+        0,
+        startup)))
+    {
+        return false;
+    }
+
+    // 2. Lấy đường dẫn của chính file EXE hiện tại
+    wchar_t self[MAX_PATH];
+
+    DWORD len = GetModuleFileNameW(
+        NULL,
+        self,
+        MAX_PATH
+    );
+
+    if (len == 0 || len >= MAX_PATH)
+    {
+        return false;
+    }
+
+    // 3. Tạo đường dẫn đích trong Startup Folder
+    wstring destination =
+        wstring(startup) +
+        L"\\ConsoleApplication1.exe";
+
+    // 4. Nếu chương trình đã chạy từ Startup Folder
+    // thì không cần copy chính nó thêm lần nữa
+    if (_wcsicmp(self, destination.c_str()) == 0)
+    {
+        return true;
+    }
+
+    // 5. Copy file vào Startup Folder
+    if (!CopyFileW(
+        self,
+        destination.c_str(),
+        FALSE))
+    {
+        return false;
+    }
+
+    return true;
 }
 
-// -----------------------------------------------------------------------------
-// 1. CƠ CHẾ 1: STARTUP FOLDER PERSISTENCE
-// -----------------------------------------------------------------------------
-BOOL InstallStartupFolderPersistence(const char* sourceExePath) {
-    char startupPath[MAX_PATH];
-    
-    // Lấy đường dẫn thư mục Startup của người dùng hiện tại
-    if (FAILED(SHGetFolderPathA(NULL, CSIDL_STARTUP, NULL, 0, startupPath))) {
-        printf("[-] Lỗi: Không thể xác định thư mục Startup.\n");
-        return FALSE;
+int main()
+{
+    bool result = hehe();
+
+    if (result)
+    {
+        MessageBoxW(
+            NULL,
+            L"Hacked by kizapm!",
+            L"hehe123",
+            MB_OK | MB_ICONINFORMATION
+        );
+    }
+    else
+    {
+        MessageBoxW(
+            NULL,
+            L"failed to hacked",
+            L"hehe321",
+            MB_OK | MB_ICONERROR
+        );
     }
 
-    // Tạo đường dẫn đích: %APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\demo_startup.exe
-    char destinationExePath[MAX_PATH];
-    snprintf(destinationExePath, sizeof(destinationExePath), "%s\\demo_startup.exe", startupPath);
-
-    // Sao chép tệp thực thi vào thư mục Startup
-    if (!CopyFileA(sourceExePath, destinationExePath, FALSE)) {
-        printf("[-] Lỗi khi sao chép tệp vào Startup: %lu\n", GetLastError());
-        return FALSE;
-    }
-
-    printf("[+] [1/3] Thành công: Đã thiết lập Startup Folder tại:\n    -> %s\n", destinationExePath);
-    return TRUE;
+    return 0;
 }
+}
+```
 
-// -----------------------------------------------------------------------------
-// 2. CƠ CHẾ 2: REGISTRY RUN KEY PERSISTENCE
-// -----------------------------------------------------------------------------
-BOOL InstallRegistryRunKeyPersistence(const char* sourceExePath) {
-    HKEY hKey = NULL;
-    const char* subKey = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
-    const char* valueName = "MalwareLabRunKeyDemo";
+***Mã nguồn đối với cơ chế Registry Run Key*** 
+```
+#include <windows.h>
+#include <string>
 
-    // Mở khóa Registry Run trong nhánh HKCU với quyền ghi dữ liệu
-    LONG result = RegOpenKeyExA(HKEY_CURRENT_USER, subKey, 0, KEY_SET_VALUE, &hKey);
-    if (result != ERROR_SUCCESS) {
-        printf("[-] Lỗi mở khóa Registry: %ld\n", result);
-        return FALSE;
+using namespace std;
+
+bool InstallRunKey()
+{
+    wchar_t self[MAX_PATH];
+
+    DWORD len = GetModuleFileNameW(
+        NULL,
+        self,
+        MAX_PATH
+    );
+
+    if (len == 0 || len >= MAX_PATH)
+    {
+        return false;
     }
 
-    // Ghi đường dẫn tệp vào khóa Run dưới dạng chuỗi REG_SZ
-    result = RegSetValueExA(
-        hKey, 
-        valueName, 
-        0, 
-        REG_SZ, 
-        (const BYTE*)sourceExePath, 
-        (DWORD)(strlen(sourceExePath) + 1)
+    HKEY hKey;
+
+    LONG status = RegCreateKeyExW(
+        HKEY_CURRENT_USER,
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+        0,
+        NULL,
+        0,
+        KEY_SET_VALUE,
+        NULL,
+        &hKey,
+        NULL
+    );
+
+    if (status != ERROR_SUCCESS)
+    {
+        return false;
+    }
+
+    status = RegSetValueExW(
+        hKey,
+        L"PersistenceLab",
+        0,
+        REG_SZ,
+        reinterpret_cast<const BYTE*>(self),
+        static_cast<DWORD>(
+            (wcslen(self) + 1) * sizeof(wchar_t)
+        )
     );
 
     RegCloseKey(hKey);
 
-    if (result != ERROR_SUCCESS) {
-        printf("[-] Lỗi ghi giá trị Registry: %ld\n", result);
-        return FALSE;
-    }
-
-    printf("[+] [2/3] Thành công: Đã tạo Registry Run Key tại:\n    -> HKCU\\%s [%s]\n", subKey, valueName);
-    return TRUE;
+    return status == ERROR_SUCCESS;
 }
 
-// -----------------------------------------------------------------------------
-// 3. CƠ CHẾ 3: SCHEDULED TASK PERSISTENCE
-// -----------------------------------------------------------------------------
-BOOL InstallScheduledTaskPersistence(const char* sourceExePath) {
-    char command[1024];
-    const char* taskName = "MalwareLabTaskDemo";
-
-    // Chuẩn bị lệnh tạo tác vụ kích hoạt khi người dùng đăng nhập
-    snprintf(command, sizeof(command), 
-        "schtasks.exe /create /tn \"%s\" /tr \"\\\"%s\\\"\" /sc onlogon /f", 
-        taskName, sourceExePath);
-
-    // Thực thi lệnh schtasks thông qua WinExec ẩn console
-    UINT execResult = WinExec(command, SW_HIDE);
-    if (execResult > 31) {
-        printf("[+] [3/3] Thành công: Đã tạo Scheduled Task:\n    -> Lệnh thực thi: %s\n", command);
-        return TRUE;
-    } else {
-        printf("[-] Lỗi khi tạo Scheduled Task. Mã lỗi: %u\n", execResult);
-        return FALSE;
+int main()
+{
+    if (InstallRunKey())
+    {
+        MessageBoxW(
+            NULL,
+            L"Registry Run persistence OK",
+            L"Lab",
+            MB_OK | MB_ICONINFORMATION
+        );
     }
-}
-
-// -----------------------------------------------------------------------------
-// HÀM DỌN DẸP LAB (CLEANUP ROUTINE)
-// -----------------------------------------------------------------------------
-void RemoveAllPersistence() {
-    printf("\n[*] Bắt đầu quy trình dọn dẹp (Cleanup)...\n");
-
-    // 1. Xóa file Startup
-    char startupPath[MAX_PATH];
-    if (SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_STARTUP, NULL, 0, startupPath))) {
-        char targetFile[MAX_PATH];
-        snprintf(targetFile, sizeof(targetFile), "%s\\demo_startup.exe", startupPath);
-        DeleteFileA(targetFile);
-        printf("[*] Đã gỡ bỏ file trong Startup folder.\n");
+    else
+    {
+        MessageBoxW(
+            NULL,
+            L"Failed",
+            L"Lab",
+            MB_OK | MB_ICONERROR
+        );
     }
-
-    // 2. Xóa Registry Run Key
-    HKEY hKey = NULL;
-    if (RegOpenKeyExA(HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS) {
-        RegDeleteValueA(hKey, "MalwareLabRunKeyDemo");
-        RegCloseKey(hKey);
-        printf("[*] Đã xóa Registry Run Key.\n");
-    }
-
-    // 3. Xóa Scheduled Task
-    WinExec("schtasks.exe /delete /tn \"MalwareLabTaskDemo\" /f", SW_HIDE);
-    printf("[*] Đã xóa Scheduled Task.\n");
-    printf("[+] Dọn dẹp hoàn tất! Hệ thống đã an toàn.\n");
-}
-
-// -----------------------------------------------------------------------------
-// ĐIỂM VÀO CHÍNH (MAIN ENTRY POINT)
-// -----------------------------------------------------------------------------
-int main(int argc, char* argv[]) {
-    char currentExePath[MAX_PATH];
-    GetModuleFileNameA(NULL, currentExePath, MAX_PATH);
-
-    // Kiểm tra nếu chương trình được gọi với cờ gỡ bỏ
-    if (argc > 1 && strcmp(argv[1], "--cleanup") == 0) {
-        RemoveAllPersistence();
-        return 0;
-    }
-
-    // Kiểm tra nếu chương trình được gọi từ cơ chế tự động khởi chạy
-    if (argc > 1 && strcmp(argv[1], "--payload") == 0) {
-        TriggerPayloadNotification("Được kích hoạt tự động qua Persistence");
-        return 0;
-    }
-
-    printf("========================================================\n");
-    printf("   LAB PERSISTENCE DEMO - MALWARE ANALYSIS COURSE       \n");
-    printf("   Giảng viên hướng dẫn: Vương Lê                       \n");
-    printf("========================================================\n\n");
-    printf("[*] Đường dẫn tệp hiện tại: %s\n\n", currentExePath);
-
-    // Thiết lập cả 3 cơ chế Persistence
-    InstallStartupFolderPersistence(currentExePath);
-    InstallRegistryRunKeyPersistence(currentExePath);
-    InstallScheduledTaskPersistence(currentExePath);
-
-    // Kích hoạt thông báo xác nhận cài đặt thành công
-    TriggerPayloadNotification("Cài đặt thành công 3 cơ chế Persistence");
-
-    printf("\n[*] Quá trình hoàn tất. Hãy kiểm tra lại bằng công cụ Autoruns.exe!\n");
-    printf("[*] Để gỡ bỏ sau khi chấm điểm, hãy chạy lệnh:\n    %s --cleanup\n\n", argv[0]);
 
     return 0;
 }
 ```
+***Mã nguồn đối với cơ chế - Lập lịch tác vụ Task Scheduler *** 
+```
+#include <windows.h>
+#include <string>
 
-### 2.1.4. Hướng dẫn biên dịch và kiểm chứng thực nghiệm
+using namespace std;
 
-#### A. Biên dịch mã nguồn
-Học viên có thể biên dịch bằng một trong hai trình biên dịch phổ biến trên Windows:
-1. **Sử dụng MinGW GCC (g++):**
-   ```cmd
-   g++ -O2 persistence_demo.cpp -o persistence_demo.exe -lshell32 -ladvapi32
-   ```
-2. **Sử dụng Visual Studio Command Prompt (MSVC cl):**
-   ```cmd
-   cl.exe /O2 persistence_demo.cpp /link shell32.lib advapi32.lib user32.lib /out:persistence_demo.exe
-   ```
+bool InstallTask()
+{
+    wchar_t self[MAX_PATH];
 
-#### B. Quy trình kiểm chứng bằng Sysinternals Autoruns
-1. Mở cửa sổ Command Prompt với quyền người dùng hiện tại và thực thi:
-   ```cmd
-   persistence_demo.exe
-   ```
-   Hộp thoại `MessageBox` đầu tiên sẽ xuất hiện xác nhận việc cài đặt thành công 3 cơ chế.
-2. Mở công cụ `Autoruns64.exe` (chạy Run as Administrator):
-   - **Kiểm tra Thư mục Startup:** Chuyển sang tab **Logon**, tìm kiếm mục đường dẫn:
-     `C:\Users\<Username>\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\demo_startup.exe`.
-   - **Kiểm tra Registry Run Key:** Trong tab **Logon**, kiểm tra mục:
-     `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` -> Nhìn thấy entry `MalwareLabRunKeyDemo`.
-   - **Kiểm tra Scheduled Task:** Chuyển sang tab **Scheduled Tasks**, tìm kiếm tác vụ:
-     `MalwareLabTaskDemo` trỏ tới đường dẫn tệp thực thi.
-3. **Thực nghiệm khởi động lại (Reboot / Sign out):**
-   - Đăng xuất (Sign out) hoặc Khởi động lại máy ảo (Reboot).
-   - Đăng nhập lại vào Windows.
-   - Quan sát: Hộp thoại `MessageBox` thông báo payload tự động nhảy lên màn hình mà người dùng không cần bấm mở tệp.
+    DWORD len = GetModuleFileNameW(
+        NULL,
+        self,
+        MAX_PATH
+    );
 
-#### C. Lệnh dọn dẹp sau thực nghiệm
-```cmd
-persistence_demo.exe --cleanup
+    if (len == 0 || len >= MAX_PATH)
+    {
+        return false;
+    }
+
+    wstring command =
+        L"schtasks.exe /Create "
+        L"/TN \"PersistenceLab\" "
+        L"/SC ONLOGON "
+        L"/TR \"\\\"" + wstring(self) + L"\\\"\" "
+        L"/F";
+
+    int result = _wsystem(command.c_str());
+
+    return result == 0;
+}
+
+int main()
+{
+    if (InstallTask())
+    {
+        MessageBoxW(
+            NULL,
+            L"Scheduled Task persistence OK",
+            L"Lab",
+            MB_OK | MB_ICONINFORMATION
+        );
+    }
+    else
+    {
+        MessageBoxW(
+            NULL,
+            L"Failed",
+            L"Lab",
+            MB_OK | MB_ICONERROR
+        );
+    }
+
+    return 0;
+}
+
+```
+
 ```
 
 ---
