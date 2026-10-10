@@ -461,12 +461,14 @@ bool InstallRunKey()
 
 int main()
 {
-    if (InstallRunKey())
+    bool result = hehe();
+
+    if (result)
     {
         MessageBoxW(
             NULL,
-            L"Registry Run persistence OK",
-            L"Lab",
+            L"Hacked by kizapm!",
+            L"hehe123",
             MB_OK | MB_ICONINFORMATION
         );
     }
@@ -474,13 +476,14 @@ int main()
     {
         MessageBoxW(
             NULL,
-            L"Failed",
-            L"Lab",
+            L"failed to hacked",
+            L"hehe321",
             MB_OK | MB_ICONERROR
         );
     }
 
     return 0;
+}
 }
 ```
 ***Mã nguồn đối với cơ chế - Lập lịch tác vụ Task Scheduler *** 
@@ -519,12 +522,14 @@ bool InstallTask()
 
 int main()
 {
-    if (InstallTask())
+    bool result = hehe();
+
+    if (result)
     {
         MessageBoxW(
             NULL,
-            L"Scheduled Task persistence OK",
-            L"Lab",
+            L"Hacked by kizapm!",
+            L"hehe123",
             MB_OK | MB_ICONINFORMATION
         );
     }
@@ -532,13 +537,14 @@ int main()
     {
         MessageBoxW(
             NULL,
-            L"Failed",
-            L"Lab",
+            L"failed to hacked",
+            L"hehe321",
             MB_OK | MB_ICONERROR
         );
     }
 
     return 0;
+}
 }
 
 ```
