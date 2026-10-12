@@ -1,4 +1,8 @@
 **Phân tích mã độc**
+
+
+
+
 Dynamic Analysis 
 1.Định nghĩa
 Phân tích động là phương pháp nghiên cứu mã độc bằng cách trực tiếp thực thi mẫu mã độc trong một môi trường cô lập được kiểm soát an toàn để giám sát,ghi nhận và đánh giá toàn bộ hành vi thực tế của nó theo thời gian thực.
