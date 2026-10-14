@@ -741,13 +741,16 @@ Sau khi trích xuất bằng  procdump64.exe -ma 200 (PID: 200) ta có
   Tiến trình đích     : C:\Windows\SysWOW64\cleanmgr.exe (Windows Disk Space Cleanup Tool)       
   Kiến trúc thực thi  : 32-bit x86 (chạy dưới subsystem WOW64 trên Windows 64-bit)                 
  Dấu hiệu bất thường : cleanmgr.exe (tiện ích dọn rác đĩa) nhưng tải wininet.dll, winhttp.dll,   
-                       ws2_32.dll và duy trì kết nối mạng ra ngoài Internet.                      
+                       ws2_32.dll và duy trì kết nối mạng ra ngoài Internet.
+```                   
 <img width="1881" height="817" alt="image" src="https://github.com/user-attachments/assets/8fb5bc0c-8061-4bb4-835c-524061ef2218" />
 <img width="1890" height="712" alt="image" src="https://github.com/user-attachments/assets/d0c2038e-5901-4a1d-b911-45ae8a99154d" />
+```
+
  **Dấu hiệu bất thường** : cleanmgr.exe (tiện ích dọn rác đĩa) nhưng tải wininet.dll, winhttp.dll,ws2_32.dll và duy trì kết nối mạng ra ngoài Internet.   
 
 Khi đọc trường `CommentStreamW` (Stream ID 11) của tệp dump, ta thu được thông tin gốc do chuyên gia phản ứng sự cố ghi nhận khi bắt giữ tiến trình:
-```text
+text
 *** procdump64.exe -ma 200
 *** Manual dump
 ```
