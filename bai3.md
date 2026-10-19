@@ -224,7 +224,7 @@ Công cụ **Sysinternals Autoruns** do Microsoft phát triển là giải pháp
 
 ---
 
-## 1.3. Kỹ thuật Persistence Nâng cao: COM Hijacking (5đ)
+## 1.3. Kỹ thuật Persistence Nâng cao: COM Hijacking 
 
 ### 1.3.1. Khái niệm COM (Component Object Model)
 **Component Object Model (COM)** là một kiến trúc hướng đối tượng chuẩn nhị phân độc lập ngôn ngữ do Microsoft phát triển từ năm 1993. COM cho phép các đối tượng phần mềm tương tác và giao tiếp với nhau xuyên suốt qua các ranh giới tiến trình (Inter-Process Communication - IPC) hoặc trong cùng một tiến trình dưới dạng In-Process Server (DLL). Hầu như toàn bộ các tác vụ giao diện, xử lý đồ họa, tự động hóa Office và tác vụ nền của Windows đều dựa trên nền tảng COM.
