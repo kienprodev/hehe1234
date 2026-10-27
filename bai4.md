@@ -1,28 +1,3 @@
-**Phân tích mã độc**
-
-
-
-
-Dynamic Analysis 
-1.Định nghĩa
-Phân tích động là phương pháp nghiên cứu mã độc bằng cách trực tiếp thực thi mẫu mã độc trong một môi trường cô lập được kiểm soát an toàn để giám sát,ghi nhận và đánh giá toàn bộ hành vi thực tế của nó theo thời gian thực.
-1.2. Mục đích
-Mục định của việc phân tích động là:
-- Quan sát hành vi của mẫu mã độc trong thực tế nó sẽ xác định chính xác mã đọc làm gì khi nào kích hoạt tạo file nào sửa registry ra sao kết nối với ip hay domain nào 
-- Giúp nhanh chóng thu thập được các dâu vết xâm nhập như c2,domain,url tải payload,khóa resgistry khởi động phục vụ cho việc điều tra kẻ tấn công
-- Phân loại được loại mã độc và mục tiêu tấn công  của chúng để đưa ra phương án tối ưu cho việc ứng phó với sự cố kịp thời
-- Giúp hỗ trợ trong quá trình dịch ngược khi payload thực thi gốc trong bộ nhớ và tự giải nén trên trong ram
-1.3 Ưu điểm
-- Vượt qua kĩ thuật làm rối và nén mã :
-Khi mình thực hiện phân tích tính 1 chương trình trở ngại lớn nhất đối với phương pháp này là payload đã được mã hóa,polymorphic hay obfuscated nhưng khi phân tích động chúng buộc phải giải mã về dạng mã máy gốc trong bộ nhớ để chạy khiến việc dịch ngược trở nên dễ dàng
--> từ đó ta có thể thấy được dynamic analysis  giúp chúng ta có thể tiết kiệm được thời gian mà vẫn hiểu được 80% payload thay vì ngồi đọc từng dòng code asm đã bị obfuscated trong ida 
-1.4.Hạn chế
-Mặc dù ta đã thấy được những ưu điểm của nó là rất lớn nhưng đi đối với nó là những hạn chế cũng mang tiềm ẩn nguy cơ rủi ro rất cao :
-- **Nguy cơ lây nhiễm môi trường thật** : Nếu chúng ta  lỡ cấu hình máy ảo không chuẩn để hở mạng nội bộ hay chia sẻ folder với máy thật hoặc con malware nó có kỹ thuật vm escape từ đó nó có thể tiếp cận và xâm nhập với máy thật 
-- **Dễ bị đánh lừa bởi kĩ thuật né tránh:**
-- ***Kĩ thuật Anti-Vm-Detection*** :khi nó check được rằng môi trường mà nó đang xâm nhập là VM (bằng cách check được địa chỉ MAC của VM ,số lượng cpu cores, dung lượng ram,hành vi của con chuột nó sẽ nằm im hoặc chúng có cơ chế tự hủy
--  ***Kĩ thuật time-bomb***: mã độc sẽ gọi sleep hàng tiếng đồng hồ hoặc kiếm tra mốc thời gian hệ thống trong tương lai mới kích hoạt hành vi độc hại
-- Hơn nữa độ bao phủ của kĩ thuật phân tích động còn ***hạn chế nó chỉ quan sát được nhánh thực thi với điều kiện môi tường tại thời điểm chạy***. nếu mã độc yêu cầu tham số dòng lệnh củ thể môi trường domain active directory hoặc lệnh phản hồi từ c2 sever thì hành vi nguy hiểm phía sau sẽ không bao giờ được bộc lộ
 
 # 2. Nghiên cứu các công cụ phân tích động
 
@@ -1315,3 +1290,22 @@ Có thể hình dung toàn bộ quá trình:
 ```
 
 Trong thực tế, các nhóm hành vi này thường liên kết với nhau chứ không xuất hiện độc lập. Ví dụ malware có thể **tạo process mới → drop file → ghi Registry để persistence → kết nối C2 → inject vào process hợp lệ**, vì vậy việc quan sát đồng thời nhiều nhóm hành vi giúp analyst hiểu đầy đủ hơn về chức năng và mục đích của mẫu mã độc.
+II. Phân tích mã độc |
+Mẫu 1
+
+ Ta có  sau : <img width="1264" height="957" alt="image" src="https://github.com/user-attachments/assets/631b42cb-d6e5-459b-88ba-04ccba8d7285" />
+
+ ta có thể thấy sau khi chạy 123 .exe nó đã dropper ra 1 con mang tên obedience.exe 
+  Tiếp đến ta sử dụng công cụ autoruns để nó ghi thêm gì vào registry 
+<img width="1024" height="768" alt="image" src="https://github.com/user-attachments/assets/08f9bbf0-3356-4cd0-98d8-092935de57d6" />
+
+Nhìn ảnh ta có thể thấy nó tạo persitance bằng cách regcreatekey tại startup
+Tiếp đến ta sẽ dùng process hacker để phân tích file obidence nó làm gì
+vào thanh memory ta thấy được 
+nó load 1 file startburn .dll đáng nghi vì nó nhẹ 1 cách bất thường so với bản gốc của nó
+
+<img width="743" height="363" alt="image" src="https://github.com/user-attachments/assets/2a9503e1-208e-4e74-9dde-139c027dd748" />
+<img width="911" height="142" alt="image" src="https://github.com/user-attachments/assets/bec6c228-4fe3-43c6-80e9-03f35884becc" />
+
+ Đồng thời ta còn thấy được 1 file có security là rwx  thông thường 1 file có quyên 
+ 
