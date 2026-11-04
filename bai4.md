@@ -1,34 +1,36 @@
-Dynamic Analysis 
-1.Định nghĩa
+# BÁO CÁO PHÂN TÍCH ĐỘNG MÃ ĐỘC
+
+## I. Tổng quan về Dynamic Analysis
+### 1.1. Định nghĩa
 Phân tích động là phương pháp nghiên cứu mã độc bằng cách trực tiếp thực thi mẫu mã độc trong một môi trường cô lập được kiểm soát an toàn để giám sát,ghi nhận và đánh giá toàn bộ hành vi thực tế của nó theo thời gian thực.
-1.2. Mục đích
+### 1.2. Mục đích
 Mục định của việc phân tích động là:
-- Quan sát hành vi của mẫu mã độc trong thực tế nó sẽ xác định chính xác mã đọc làm gì khi nào kích hoạt tạo file nào sửa registry ra sao kết nối với ip hay domain nào 
+- Quan sát hành vi của mẫu mã độc trong thực tế nó sẽ xác định chính xác mã đọc làm gì khi nào kích hoạt tạo file nào sửa registry ra sao kết nối với ip hay domain nào
 - Giúp nhanh chóng thu thập được các dâu vết xâm nhập như c2,domain,url tải payload,khóa resgistry khởi động phục vụ cho việc điều tra kẻ tấn công
 - Phân loại được loại mã độc và mục tiêu tấn công  của chúng để đưa ra phương án tối ưu cho việc ứng phó với sự cố kịp thời
 - Giúp hỗ trợ trong quá trình dịch ngược khi payload thực thi gốc trong bộ nhớ và tự giải nén trên trong ram
-1.3 Ưu điểm
+### 1.3. Ưu điểm
 - Vượt qua kĩ thuật làm rối và nén mã :
 Khi mình thực hiện phân tích tính 1 chương trình trở ngại lớn nhất đối với phương pháp này là payload đã được mã hóa,polymorphic hay obfuscated nhưng khi phân tích động chúng buộc phải giải mã về dạng mã máy gốc trong bộ nhớ để chạy khiến việc dịch ngược trở nên dễ dàng
--> từ đó ta có thể thấy được dynamic analysis  giúp chúng ta có thể tiết kiệm được thời gian mà vẫn hiểu được 80% payload thay vì ngồi đọc từng dòng code asm đã bị obfuscated trong ida 
-1.4.Hạn chế
+-> từ đó ta có thể thấy được dynamic analysis  giúp chúng ta có thể tiết kiệm được thời gian mà vẫn hiểu được 80% payload thay vì ngồi đọc từng dòng code asm đã bị obfuscated trong ida
+### 1.4. Hạn chế
 Mặc dù ta đã thấy được những ưu điểm của nó là rất lớn nhưng đi đối với nó là những hạn chế cũng mang tiềm ẩn nguy cơ rủi ro rất cao :
-- **Nguy cơ lây nhiễm môi trường thật** : Nếu chúng ta  lỡ cấu hình máy ảo không chuẩn để hở mạng nội bộ hay chia sẻ folder với máy thật hoặc con malware nó có kỹ thuật vm escape từ đó nó có thể tiếp cận và xâm nhập với máy thật 
+- **Nguy cơ lây nhiễm môi trường thật** : Nếu chúng ta  lỡ cấu hình máy ảo không chuẩn để hở mạng nội bộ hay chia sẻ folder với máy thật hoặc con malware nó có kỹ thuật vm escape từ đó nó có thể tiếp cận và xâm nhập với máy thật
 - **Dễ bị đánh lừa bởi kĩ thuật né tránh:**
-	- ***Kĩ thuật Anti-Vm-Detection*** :khi nó check được rằng môi trường mà nó đang xâm nhập là VM (bằng cách check được địa chỉ MAC của VM ,số lượng cpu cores, dung lượng ram,hành vi của con chuột nó sẽ nằm im hoặc chúng có cơ chế tự hủy
-	-  ***Kĩ thuật time-bomb***: mã độc sẽ gọi sleep hàng tiếng đồng hồ hoặc kiếm tra mốc thời gian hệ thống trong tương lai mới kích hoạt hành vi độc hại
-	- Hơn nữa độ bao phủ của kĩ thuật phân tích động còn ***hạn chế nó chỉ quan sát được nhánh thực thi với điều kiện môi tường tại thời điểm chạy***. nếu mã độc yêu cầu tham số dòng lệnh củ thể môi trường domain active directory hoặc lệnh phản hồi từ c2 sever thì hành vi nguy hiểm phía sau sẽ không bao giờ được bộc lộ
-# 2. Nghiên cứu các công cụ phân tích động
+    - ***Kĩ thuật Anti-Vm-Detection*** :khi nó check được rằng môi trường mà nó đang xâm nhập là VM (bằng cách check được địa chỉ MAC của VM ,số lượng cpu cores, dung lượng ram,hành vi của con chuột nó sẽ nằm im hoặc chúng có cơ chế tự hủy
+    -  ***Kĩ thuật time-bomb***: mã độc sẽ gọi sleep hàng tiếng đồng hồ hoặc kiếm tra mốc thời gian hệ thống trong tương lai mới kích hoạt hành vi độc hại
+    - Hơn nữa độ bao phủ của kĩ thuật phân tích động còn ***hạn chế nó chỉ quan sát được nhánh thực thi với điều kiện môi tường tại thời điểm chạy***. nếu mã độc yêu cầu tham số dòng lệnh củ thể môi trường domain active directory hoặc lệnh phản hồi từ c2 sever thì hành vi nguy hiểm phía sau sẽ không bao giờ được bộc lộ
+## 2. Nghiên cứu các công cụ phân tích động
 
-## 2.1. Process Hacker
+### 2.1. Process Hacker
 
-### Mục đích chính
+#### Mục đích chính
 
 Process Hacker là công cụ dùng để theo dõi và quản lý sâu các tiến trình đang hoạt động trên hệ thống Windows. So với Task Manager mặc định, công cụ này cung cấp nhiều thông tin chi tiết hơn về process, thread, module, handle, vùng nhớ, service và kết nối mạng.
 
 Trong phân tích mã độc, Process Hacker đặc biệt hữu ích khi cần quan sát hành vi của một tiến trình theo thời gian thực, kiểm tra các DLL được load, thread đang hoạt động hoặc các vùng nhớ có quyền thực thi bất thường.
 
-### Loại dữ liệu thu thập được
+#### Loại dữ liệu thu thập được
 
 Process Hacker có thể cung cấp các thông tin như:
 
@@ -45,7 +47,7 @@ Process Hacker có thể cung cấp các thông tin như:
 -   Service
 -   TCP/UDP connection
 
-### Ví dụ thông tin có giá trị trong phân tích malware
+#### Ví dụ thông tin có giá trị trong phân tích malware
 
 Một process tree bất thường có thể có dạng:
 
@@ -80,17 +82,17 @@ PAGE_EXECUTE_READWRITE
 
 cũng đáng chú ý vì có thể liên quan đến shellcode, code đã unpack hoặc process injection.
 
-----------
+---
 
-## 2.2. Process Explorer
+### 2.2. Process Explorer
 
-### Mục đích chính
+#### Mục đích chính
 
 Process Explorer là công cụ thuộc bộ Microsoft Sysinternals, được sử dụng để quan sát các process đang chạy và mối quan hệ giữa chúng.
 
 Điểm mạnh của Process Explorer là khả năng hiển thị **process tree** trực quan, giúp analyst nhanh chóng xác định process cha, process con và chuỗi thực thi.
 
-### Loại dữ liệu thu thập được
+#### Loại dữ liệu thu thập được
 
 Process Explorer có thể hiển thị:
 
@@ -108,7 +110,7 @@ Process Explorer có thể hiển thị:
 -   DLL/module đang load
 -   Open handle
 
-### Ví dụ thông tin có giá trị trong phân tích malware
+#### Ví dụ thông tin có giá trị trong phân tích malware
 
 Ví dụ:
 
@@ -142,11 +144,11 @@ C:\Users\User\AppData\Roaming\unknown.dll
 
 DLL lạ nằm trong thư mục của user nhưng được load vào `svchost.exe` là một artifact đáng điều tra.
 
-----------
+---
 
-## 2.3. Process Monitor
+### 2.3. Process Monitor
 
-### Mục đích chính
+#### Mục đích chính
 
 Process Monitor (Procmon) là một trong những công cụ quan trọng nhất trong phân tích động trên Windows. Công cụ này theo dõi hoạt động hệ thống theo thời gian thực và tập trung vào các nhóm hành vi như:
 
@@ -158,39 +160,17 @@ Process Monitor (Procmon) là một trong những công cụ quan trọng nhất
 
 Procmon rất hữu ích để phát hiện file được tạo, Registry bị chỉnh sửa hoặc process mới được sinh ra sau khi chạy mẫu mã độc.
 
-### Loại dữ liệu thu thập được
+#### Loại dữ liệu thu thập được
 
-Trường dữ liệu
-
-Ý nghĩa
-
-Time
-
-Thời điểm event xảy ra
-
-Process Name
-
-Process thực hiện hành vi
-
-PID
-
-Process ID
-
-Operation
-
-Loại hành động
-
-Path
-
-File hoặc Registry path liên quan
-
-Result
-
-Kết quả thao tác
-
-Detail
-
-Thông tin chi tiết
+| Trường dữ liệu | Ý nghĩa |
+| --- | --- |
+| Time | Thời điểm event xảy ra |
+| Process Name | Process thực hiện hành vi |
+| PID | Process ID |
+| Operation | Loại hành động |
+| Path | File hoặc Registry path liên quan |
+| Result | Kết quả thao tác |
+| Detail | Thông tin chi tiết |
 
 Một số operation thường gặp:
 
@@ -211,9 +191,9 @@ Process Exit
 Load Image
 ```
 
-### Ví dụ thông tin có giá trị trong phân tích malware
+#### Ví dụ thông tin có giá trị trong phân tích malware
 
-#### Phát hiện file drop
+##### Phát hiện file drop
 
 ```
 sample.exe
@@ -224,7 +204,7 @@ SUCCESS
 
 Thông tin này cho thấy sample đã ghi một executable xuống hệ thống.
 
-#### Phát hiện Registry persistence
+##### Phát hiện Registry persistence
 
 ```
 sample.exe
@@ -235,7 +215,7 @@ SUCCESS
 
 Event này có thể liên quan đến cơ chế persistence thông qua Registry Run Key.
 
-#### Phát hiện DLL được load
+##### Phát hiện DLL được load
 
 ```
 sample.exe
@@ -245,23 +225,23 @@ C:\Users\User\AppData\Temp\evil.dll
 
 Điều này giúp analyst xác định các module được load trong runtime.
 
-----------
-## 2.3.1. Tổng quan lại Process hacker , process explorer , process monitor
+---
+### 2.3.1. Tổng quan lại Process hacker , process explorer , process monitor
 Nhìn qua ta có cảm giác 3 tools này trông có vẻ giống nhau về mặt công dụng nhưng chúng lại có mục đích riêng biệt trong việc phân tích malware.
 
  1. **Process hacker** : chúng chuyên dùng để phân tích trong process chúng đang làm gì kiểm tra các thread,module,handle,memory,service,nework
- 2. **Process explorer** : công cụ có tác dụng để quan sát process tree và process cha con dữ liệu nổi bật là pid,ppid,cmd, dll,signature.tóm lại công cụ này để phân tích process nào được sinh ra bởi process nào 
- 3. **Process monitor** : ghi lại hoạt động hệ thóng theo thời gian thực , dữ liệu nổi bật trong công cụ này là file,registry process, thread , image load. Loại này thường được dùng để xem rằng process có tác động gì đến hệ thống 
+ 2. **Process explorer** : công cụ có tác dụng để quan sát process tree và process cha con dữ liệu nổi bật là pid,ppid,cmd, dll,signature.tóm lại công cụ này để phân tích process nào được sinh ra bởi process nào
+ 3. **Process monitor** : ghi lại hoạt động hệ thóng theo thời gian thực , dữ liệu nổi bật trong công cụ này là file,registry process, thread , image load. Loại này thường được dùng để xem rằng process có tác động gì đến hệ thống
 
-## 2.4. Autoruns
+### 2.4. Autoruns
 
-### Mục đích chính
+#### Mục đích chính
 
 Autoruns là công cụ thuộc bộ Microsoft Sysinternals, được sử dụng để kiểm tra các vị trí tự khởi động trên Windows.
 
 Trong phân tích malware, Autoruns đặc biệt hữu ích để xác định các cơ chế **persistence** mà mã độc sử dụng để tự chạy lại sau khi reboot hoặc user đăng nhập.
 
-### Loại dữ liệu thu thập được
+#### Loại dữ liệu thu thập được
 
 Autoruns có thể hiển thị các nhóm autostart như:
 
@@ -287,9 +267,9 @@ Thông tin có thể thu thập bao gồm:
 -   Timestamp
 -   Image path
 
-### Ví dụ thông tin có giá trị trong phân tích malware
+#### Ví dụ thông tin có giá trị trong phân tích malware
 
-#### Registry Run Key
+##### Registry Run Key
 
 ```
 Logon
@@ -299,7 +279,7 @@ C:\Users\User\AppData\Roaming\abc.exe
 
 Entry trên có thể là dấu hiệu của Registry Run Key persistence.
 
-#### Scheduled Task
+##### Scheduled Task
 
 ```
 Scheduled Tasks
@@ -309,7 +289,7 @@ C:\ProgramData\payload.exe
 
 Task có tên giống thành phần Windows nhưng trỏ tới file lạ là dấu hiệu đáng chú ý.
 
-#### Service
+##### Service
 
 ```
 Services
@@ -329,11 +309,11 @@ After infection
 
 qua đó xác định entry mới xuất hiện sau khi chạy sample.
 
-----------
+---
 
-## 2.5. Wireshark
+### 2.5. Wireshark
 
-### Mục đích chính
+#### Mục đích chính
 
 Wireshark là công cụ dùng để bắt và phân tích lưu lượng mạng ở mức packet.
 
@@ -346,7 +326,7 @@ Trong phân tích malware, Wireshark giúp xác định các hoạt động như
 -   Beaconing
 -   Giao tiếp qua các giao thức khác nhau
 
-### Loại dữ liệu thu thập được
+#### Loại dữ liệu thu thập được
 
 Wireshark có thể hiển thị:
 
@@ -374,9 +354,9 @@ SMB
 ICMP
 ```
 
-### Ví dụ thông tin có giá trị trong phân tích malware
+#### Ví dụ thông tin có giá trị trong phân tích malware
 
-#### DNS Query
+##### DNS Query
 
 ```
 DNS Query:
@@ -385,7 +365,7 @@ evil.example
 
 Thông tin này có thể được sử dụng như một domain IOC.
 
-#### HTTP Request
+##### HTTP Request
 
 ```
 GET /gate.php?id=123 HTTP/1.1
@@ -400,7 +380,7 @@ Từ request trên có thể thu thập:
 -   User-Agent
 -   Victim ID
 
-#### TCP Connection
+##### TCP Connection
 
 ```
 192.168.1.10:50234
@@ -410,17 +390,17 @@ Từ request trên có thể thu thập:
 
 Thông tin này giúp xác định IP đích, port và giao thức mà malware sử dụng.
 
-----------
+---
 
-## 2.6. HTTP Debugger
+### 2.6. HTTP Debugger
 
-### Mục đích chính
+#### Mục đích chính
 
 HTTP Debugger là công cụ dùng để theo dõi và phân tích traffic HTTP/HTTPS theo dạng request và response.
 
 Nếu Wireshark mạnh ở mức packet và hỗ trợ nhiều protocol, HTTP Debugger tập trung nhiều hơn vào **logic giao tiếp HTTP**, giúp analyst đọc request và response trực quan hơn.
 
-### Loại dữ liệu thu thập được
+#### Loại dữ liệu thu thập được
 
 HTTP Debugger có thể hiển thị:
 
@@ -436,7 +416,7 @@ HTTP Debugger có thể hiển thị:
 -   Response status
 -   Response body
 
-### Ví dụ thông tin có giá trị trong phân tích malware
+#### Ví dụ thông tin có giá trị trong phân tích malware
 
 Ví dụ malware gửi request:
 
@@ -479,69 +459,22 @@ Host: example.com
 
 Request này có thể cho thấy sample đang tải thêm payload từ máy chủ từ xa.
 
-----------
+---
 
-# Bảng so sánh tổng hợp
+## Bảng so sánh tổng hợp
 
-Công cụ
+| Công cụ | Mục đích chính | Dữ liệu thu thập được | Giá trị trong phân tích malware |
+| --- | --- | --- | --- |
+| **Process Hacker** | Phân tích sâu process | Process, thread, module, handle, memory, network | Phát hiện injection, DLL lạ, vùng nhớ đáng ngờ |
+| **Process Explorer** | Quan sát process tree | PID, PPID, command line, DLL, signature | Xác định quan hệ parent-child và process bất thường |
+| **Process Monitor** | Theo dõi hoạt động hệ thống | File, Registry, process, thread, image load | Phát hiện file drop, Registry modification, process creation |
+| **Autoruns** | Phát hiện autostart/persistence | Run key, Service, Task, Driver, WMI | Xác định cơ chế persistence |
+| **Wireshark** | Phân tích traffic mạng | IP, port, domain, protocol, packet | Phát hiện C2, DNS, exfiltration, payload download |
+| **HTTP Debugger** | Phân tích HTTP/HTTPS | URL, header, request, response, body | Phát hiện C2 HTTP, API endpoint, dữ liệu truyền nhận |
 
-Mục đích chính
+---
 
-Dữ liệu thu thập được
-
-Giá trị trong phân tích malware
-
-**Process Hacker**
-
-Phân tích sâu process
-
-Process, thread, module, handle, memory, network
-
-Phát hiện injection, DLL lạ, vùng nhớ đáng ngờ
-
-**Process Explorer**
-
-Quan sát process tree
-
-PID, PPID, command line, DLL, signature
-
-Xác định quan hệ parent-child và process bất thường
-
-**Process Monitor**
-
-Theo dõi hoạt động hệ thống
-
-File, Registry, process, thread, image load
-
-Phát hiện file drop, Registry modification, process creation
-
-**Autoruns**
-
-Phát hiện autostart/persistence
-
-Run key, Service, Task, Driver, WMI
-
-Xác định cơ chế persistence
-
-**Wireshark**
-
-Phân tích traffic mạng
-
-IP, port, domain, protocol, packet
-
-Phát hiện C2, DNS, exfiltration, payload download
-
-**HTTP Debugger**
-
-Phân tích HTTP/HTTPS
-
-URL, header, request, response, body
-
-Phát hiện C2 HTTP, API endpoint, dữ liệu truyền nhận
-
-----------
-
-# Nhận xét tổng hợp
+## Nhận xét tổng hợp
 
 Không có một công cụ đơn lẻ nào có thể cung cấp đầy đủ toàn bộ hành vi của malware. Trong thực tế, analyst thường kết hợp nhiều công cụ để xây dựng một bức tranh hoàn chỉnh.
 
@@ -594,7 +527,7 @@ HTTP Debugger
 Việc kết hợp các công cụ trên giúp analyst xác định được cả hành vi trên máy nạn nhân lẫn hành vi giao tiếp mạng, từ đó thu thập IOC và xây dựng behavioral profile của mẫu mã độc
 Dưới đây là phần có thể đưa gần như nguyên văn vào báo cáo.
 
-# 3. Các nhóm hành vi quan trọng khi phân tích động
+## 3. Các nhóm hành vi quan trọng khi phân tích động
 
 Trong phân tích động, mục tiêu không chỉ là xác định malware có chạy hay không mà quan trọng hơn là quan sát **nó đã làm gì sau khi được thực thi**. Các hành vi thường được chia thành nhiều nhóm để analyst dễ theo dõi và xây dựng behavioral profile của mẫu.
 
@@ -607,11 +540,11 @@ Sáu nhóm quan trọng gồm:
 -   Network
 -   Anti-analysis / Evasion
 
-----------
+---
 
-## 3.1. Process / Injection
+### 3.1. Process / Injection
 
-### Nội dung cần quan sát
+#### Nội dung cần quan sát
 
 Nhóm này tập trung vào các process và thread được tạo ra trong quá trình malware hoạt động.
 
@@ -653,7 +586,7 @@ ResumeThread
 QueueUserAPC
 ```
 
-### Process Injection là gì?
+#### Process Injection là gì?
 
 Process Injection là kỹ thuật đưa code vào một process khác để code của malware chạy bên trong process đó.
 
@@ -684,7 +617,7 @@ rundll32.exe
 
 để che giấu hoạt động.
 
-### Vì sao nhóm này quan trọng?
+#### Vì sao nhóm này quan trọng?
 
 Process behavior giúp analyst hiểu được **execution flow** của malware.
 
@@ -720,11 +653,11 @@ Injection còn đặc biệt quan trọng vì malware thường dùng kỹ thu�
 
 Do đó, Process / Injection là một trong những nhóm hành vi quan trọng nhất khi phân tích malware.
 
-----------
+---
 
-## 3.2. File System
+### 3.2. File System
 
-### Nội dung cần quan sát
+#### Nội dung cần quan sát
 
 File System behavior bao gồm các thao tác của malware đối với file và thư mục.
 
@@ -755,7 +688,7 @@ FindFirstFile
 FindNextFile
 ```
 
-### Ví dụ
+#### Ví dụ
 
 Malware ban đầu:
 
@@ -799,7 +732,7 @@ WriteFile
 
 Hành vi này có thể liên quan đến tìm kiếm hoặc chỉnh sửa dữ liệu người dùng.
 
-### Vì sao nhóm này quan trọng?
+#### Vì sao nhóm này quan trọng?
 
 Malware thường cần tương tác với file system để:
 
@@ -822,11 +755,11 @@ C:\Users\User\AppData\Roaming\svchost.exe
 
 là một đường dẫn đáng nghi vì `svchost.exe` hợp lệ thường nằm trong thư mục hệ thống, không phải `AppData`.
 
-----------
+---
 
-## 3.3. Registry
+### 3.3. Registry
 
-### Nội dung cần quan sát
+#### Nội dung cần quan sát
 
 Windows Registry lưu rất nhiều thông tin cấu hình của hệ điều hành và ứng dụng.
 
@@ -850,7 +783,7 @@ RegDeleteValue
 RegDeleteKey
 ```
 
-### Ví dụ
+#### Ví dụ
 
 Malware ghi:
 
@@ -887,7 +820,7 @@ HKCU\Software\SomeName
     ID     = ABC123
 ```
 
-### Vì sao nhóm này quan trọng?
+#### Vì sao nhóm này quan trọng?
 
 Registry có thể cung cấp thông tin về:
 
@@ -901,11 +834,11 @@ Registry có thể cung cấp thông tin về:
 
 Registry artifact thường rất hữu ích trong DFIR vì chúng có thể vẫn tồn tại ngay cả sau khi process malware đã kết thúc.
 
-----------
+---
 
-## 3.4. Persistence
+### 3.4. Persistence
 
-### Persistence là gì?
+#### Persistence là gì?
 
 Persistence là khả năng giúp malware **tiếp tục chạy lại sau khi process bị đóng, user đăng nhập lại hoặc hệ thống reboot**.
 
@@ -923,7 +856,7 @@ user login
 malware chạy lại
 ```
 
-### Các persistence technique thường gặp
+#### Các persistence technique thường gặp
 
 -   Registry Run / RunOnce
 -   Startup Folder
@@ -958,7 +891,7 @@ WindowsUpdateCheck
 C:\ProgramData\payload.exe
 ```
 
-### Vì sao nhóm này quan trọng?
+#### Vì sao nhóm này quan trọng?
 
 Persistence giúp malware tồn tại lâu dài trên hệ thống.
 
@@ -990,11 +923,11 @@ Do đó persistence là một dấu hiệu rất quan trọng khi điều tra s�
 
 Các persistence artifact cũng có giá trị cao cho detection và incident response.
 
-----------
+---
 
-## 3.5. Network
+### 3.5. Network
 
-### Nội dung cần quan sát
+#### Nội dung cần quan sát
 
 Malware thường cần giao tiếp qua mạng để:
 
@@ -1040,7 +973,7 @@ send
 recv
 ```
 
-### Ví dụ
+#### Ví dụ
 
 ```
 sample.exe
@@ -1084,7 +1017,7 @@ Command
 Victim executes command
 ```
 
-### Vì sao nhóm này quan trọng?
+#### Vì sao nhóm này quan trọng?
 
 Network behavior có thể tiết lộ:
 
@@ -1105,11 +1038,11 @@ Network behavior có thể tiết lộ:
 -   EDR detection
 -   Incident response
 
-----------
+---
 
-## 3.6. Anti-analysis / Evasion
+### 3.6. Anti-analysis / Evasion
 
-### Anti-analysis là gì?
+#### Anti-analysis là gì?
 
 Anti-analysis là các kỹ thuật malware sử dụng để phát hiện hoặc gây khó khăn cho môi trường phân tích.
 
@@ -1149,7 +1082,7 @@ Username
 Computer name
 ```
 
-### Ví dụ
+#### Ví dụ
 
 ```
 sample.exe
@@ -1181,7 +1114,7 @@ Sandbox timeout
 payload không bao giờ được kích hoạt
 ```
 
-### Evasion
+#### Evasion
 
 Malware cũng có thể cố né detection bằng:
 
@@ -1206,7 +1139,7 @@ VirtualAllocEx
 
 thay vì import trực tiếp `VirtualAllocEx`.
 
-### Vì sao nhóm này quan trọng?
+#### Vì sao nhóm này quan trọng?
 
 Anti-analysis có thể khiến analyst đưa ra kết luận sai.
 
@@ -1240,51 +1173,18 @@ Conditional execution
 Environment checks
 ```
 
-----------
+---
 
-# Bảng tổng hợp
+## Bảng tổng hợp
 
-Nhóm hành vi
-
-Quan sát chính
-
-Tại sao quan trọng
-
-**Process / Injection**
-
-Process, thread, memory, module
-
-Xác định execution flow và phát hiện injection
-
-**File System**
-
-File create/read/write/delete
-
-Phát hiện payload, config, dữ liệu và IOC
-
-**Registry**
-
-Key/value read-write
-
-Phát hiện configuration và persistence
-
-**Persistence**
-
-Run key, service, task, WMI...
-
-Xác định cách malware tồn tại sau reboot/login
-
-**Network**
-
-IP, domain, URL, protocol
-
-Phát hiện C2, download và exfiltration
-
-**Anti-analysis / Evasion**
-
-VM/debugger check, sleep, obfuscation
-
-Tránh bỏ sót hoặc hiểu sai behavior
+| Nhóm hành vi | Quan sát chính | Tại sao quan trọng |
+| --- | --- | --- |
+| **Process / Injection** | Process, thread, memory, module | Xác định execution flow và phát hiện injection |
+| **File System** | File create/read/write/delete | Phát hiện payload, config, dữ liệu và IOC |
+| **Registry** | Key/value read-write | Phát hiện configuration và persistence |
+| **Persistence** | Run key, service, task, WMI... | Xác định cách malware tồn tại sau reboot/login |
+| **Network** | IP, domain, URL, protocol | Phát hiện C2, download và exfiltration |
+| **Anti-analysis / Evasion** | VM/debugger check, sleep, obfuscation | Tránh bỏ sót hoặc hiểu sai behavior |
 
 Có thể hình dung toàn bộ quá trình:
 
@@ -1309,22 +1209,22 @@ Có thể hình dung toàn bộ quá trình:
 ```
 
 Trong thực tế, các nhóm hành vi này thường liên kết với nhau chứ không xuất hiện độc lập. Ví dụ malware có thể **tạo process mới → drop file → ghi Registry để persistence → kết nối C2 → inject vào process hợp lệ**, vì vậy việc quan sát đồng thời nhiều nhóm hành vi giúp analyst hiểu đầy đủ hơn về chức năng và mục đích của mẫu mã độc.
-II. Phân tích mã độc |
-Mẫu 1
+## II. Phân tích mẫu mã độc
+### Mẫu 1: Phân tích mẫu thực thi 123.exe
 
  Ta có  sau : <img width="1264" height="957" alt="image" src="https://github.com/user-attachments/assets/631b42cb-d6e5-459b-88ba-04ccba8d7285" />
- <img width="713" height="70" alt="image" src="https://github.com/user-attachments/assets/998dfec5-7748-4ed0-93b8-c3afe9ba3d89" />
+![image](https://github.com/user-attachments/assets/998dfec5-7748-4ed0-93b8-c3afe9ba3d89)
  ta có thể thấy sau khi chạy 123 .exe nó đã dropper ra 1 con mang tên obedience.exe và 2 file payload dll và .dat
-  Tiếp đến ta sử dụng công cụ autoruns để nó ghi thêm gì vào registry 
-<img width="1024" height="768" alt="image" src="https://github.com/user-attachments/assets/08f9bbf0-3356-4cd0-98d8-092935de57d6" />
+  Tiếp đến ta sử dụng công cụ autoruns để nó ghi thêm gì vào registry
+![image](https://github.com/user-attachments/assets/08f9bbf0-3356-4cd0-98d8-092935de57d6)
 
 Nhìn ảnh ta có thể thấy nó tạo persitance bằng cách regcreatekey tại startup
 Tiếp đến ta sẽ dùng process hacker để phân tích file obidence nó làm gì
-vào thanh memory ta thấy được 
+vào thanh memory ta thấy được
 nó load 1 file startburn .dll đáng nghi vì nó nhẹ 1 cách bất thường so với bản gốc của nó
 
-<img width="743" height="363" alt="image" src="https://github.com/user-attachments/assets/2a9503e1-208e-4e74-9dde-139c027dd748" />
-<img width="911" height="142" alt="image" src="https://github.com/user-attachments/assets/bec6c228-4fe3-43c6-80e9-03f35884becc" />
+![image](https://github.com/user-attachments/assets/2a9503e1-208e-4e74-9dde-139c027dd748)
+![image](https://github.com/user-attachments/assets/bec6c228-4fe3-43c6-80e9-03f35884becc)
 
 Đồng thời ta còn thấy được 1 file có security là rwx  thông thường 1 file rất ít khi dùng quyền này
  ```
@@ -1333,7 +1233,7 @@ nó load 1 file startburn .dll đáng nghi vì nó nhẹ 1 cách bất thường
 ```
 
 bởi vì con này tắt quá nhanh nên việc dump ra rất khó nên tôi chuyển qua phân tích IDA
-Đây là mã giả đoạn đó 
+Đây là mã giả đoạn đó
 ```
  sub_4044B0 proc near
 arg_0= dword ptr  8
@@ -1362,7 +1262,7 @@ sub_4044B0 endp
 ```
 nhìn qua t có thể phóng đoán rằng file .dll kia chắc để load payload trong file .dat ta đặt breakpoint vào hàm mov
 quay lại bạn đầu ta nhớ rằng nó còn payload 4kb tại hàm 0x2740000
-trong file tĩnh tôi đã tìm được nó 
+trong file tĩnh tôi đã tìm được nó
 ```
 BOOL DecryptPayloadMemory(LPBYTE lpBuffer, DWORD dwSize)
 {
@@ -1703,6 +1603,7 @@ void ReflectivePELoader(BYTE* pRawPayloadWithShellcode) {
 }
 ```
 Từ 2 chứng cứ trên ta có thể xác định được luồng hoạt động hoàn chỉnh của con malware này
+```text
 [obedience.exe (Host sạch)]
        │ (Tự nạp theo Search Order)
        ▼
@@ -1718,10 +1619,11 @@ Từ 2 chứng cứ trên ta có thể xác định được luồng hoạt đ�
        ▼
 [RedLeaves RAT chạy hoàn toàn trên RAM] (Chụp màn hình, trộm pass Firefox/DPAPI, kết nối C2)
 
+```
 IOC và YARA RULE sẽ được đặt ở cuối
-MALware số 2 : 2.doc (Emotet Downloader)
+### Mẫu 2: 2.doc (Emotet Downloader)
 
-### 1. Phân tích tĩnh Macro OLE (Static Analysis)
+#### 1. Phân tích tĩnh Macro OLE (Static Analysis)
 Mẫu ban đầu là tài liệu Word `2.doc` thuộc định dạng OLE2 Compound File. Khi kiểm tra bằng `olevba`, tài liệu chứa macro VBA độc hại được kích hoạt tự động qua sự kiện:
 ```vb
 Private Sub Document_open()
@@ -1748,7 +1650,7 @@ Macro sử dụng các kỹ thuật làm mờ (obfuscation):
 
 ---
 
-### 2. Phân tích động bằng Process Monitor (Procmon) & Bằng chứng thực nghiệm
+#### 2. Phân tích động bằng Process Monitor (Procmon) & Bằng chứng thực nghiệm
 
 Khi theo dõi hoạt động hệ thống bằng Process Monitor với bộ lọc:
 - `Process Name is powershell.exe`
@@ -1757,14 +1659,14 @@ Khi theo dõi hoạt động hệ thống bằng Process Monitor với bộ lọ
 
 Ta thu được các mắt xích thực thi theo đúng trình tự thời gian:
 
-#### a. Bắt quan hệ tiến trình WMI và câu lệnh ẩn
+##### a. Bắt quan hệ tiến trình WMI và câu lệnh ẩn
 Trong sự kiện `Process Create`, `wmiprvse.exe` (PID 3708 - WMI Provider Host) đứng ra sinh tiến trình `powershell.exe` (PID 7480) đi kèm tiến trình hỗ trợ console `conhost.exe 0xffffffff -ForceV1`.
 Trong tab **Process / Event Properties** của sự kiện, mục **Command line** ghi nhận nguyên văn câu lệnh:
 ```cmd
 "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -e JABBAHUAagAwAHAAYgBtAD0AKAAnAE8AJwArACgAJwA2AGwAOQAnACsAJwAyAGYAYwAnACkAKQA...
 ```
 
-#### b. Bắt dấu vết kết nối mạng (Network C2 Trace)
+##### b. Bắt dấu vết kết nối mạng (Network C2 Trace)
 Trong sự kiện `TCP Connect`, `powershell.exe` kết nối ra ngoài Internet tới máy chủ lưu trữ payload:
 - **Path:** `DESKTOP-EEUOBIV:50120 -> 144.99.107.86.netsons.net:http`
 - **Result:** `SUCCESS`
@@ -1772,7 +1674,7 @@ Trong sự kiện `TCP Connect`, `powershell.exe` kết nối ra ngoài Internet
 
 ---
 
-### 3. Giải mã kịch bản PowerShell (Stage 2 Payload)
+#### 3. Giải mã kịch bản PowerShell (Stage 2 Payload)
 
 Chuỗi Base64 sau cờ `-e` được giải mã theo định dạng UTF-16LE:
 ```powershell
@@ -1818,7 +1720,7 @@ foreach ($Cgctt61 in $Smyttl7) {
 
 ---
 
-### 4. Sơ đồ luồng hoạt động Mẫu 2
+#### 4. Sơ đồ luồng hoạt động Mẫu 2
 
 ```
 [2.doc (Tài liệu Word)]
@@ -1842,9 +1744,9 @@ foreach ($Cgctt61 in $Smyttl7) {
 
 ---
 
-MALware số 3 : wss.exe + libcef.dll + config.ini (DLL Sideloading 64-bit)
+### Mẫu 3: wss.exe + libcef.dll + config.ini (DLL Sideloading 64-bit)
 
-### 1. Phân tích cấu trúc bộ 3 thành phần
+#### 1. Phân tích cấu trúc bộ 3 thành phần
 Gói tấn công đại diện cho kỹ thuật APT DLL Sideloading (DLL Search Order Hijacking) trên nền tảng 64-bit:
 - **`wss.exe` (737,472 bytes - Clean Host):** Tệp thực thi hợp pháp nguyên bản từ bên thứ ba, phụ thuộc vào Chromium Embedded Framework (CEF) và khai báo nhập 35 hàm API từ thư viện `libcef.dll`.
 - **`libcef.dll` (243,712 bytes - Sideloading Proxy DLL):** Thư viện liên kết động độc hại (Trojan:Win32/Posilod), giả mạo DLL chính thống của CEF, xuất khẩu chính xác 35 hàm stub để khớp với IAT của `wss.exe`. Mã lệnh bên trong được làm mờ bằng OLLVM (Mixed Boolean Arithmetic & Control Flow Flattening).
@@ -1852,7 +1754,7 @@ Gói tấn công đại diện cho kỹ thuật APT DLL Sideloading (DLL Search 
 
 ---
 
-### 2. Phân tích động bằng Process Monitor (Procmon)
+#### 2. Phân tích động bằng Process Monitor (Procmon)
 
 Khi giám sát tiến trình `wss.exe` trên Process Monitor (bộ lọc: `Process Name is wss.exe`), ta ghi nhận được toàn bộ chuỗi nạp DLL và payload:
 
@@ -1869,7 +1771,7 @@ Khi giám sát tiến trình `wss.exe` trên Process Monitor (bộ lọc: `Proce
 
 ---
 
-### 3. Sơ đồ luồng hoạt động Mẫu 3
+#### 3. Sơ đồ luồng hoạt động Mẫu 3
 
 ```
 [wss.exe (Clean CEF Host)]
@@ -1889,9 +1791,9 @@ Khi giám sát tiến trình `wss.exe` trên Process Monitor (bộ lọc: `Proce
 
 ---
 
-# III. Bảng Tổng Hợp Chỉ Số Nhận Diện (IOCs) & YARA Rules
+## III. Bảng Tổng Hợp Chỉ Số Nhận Diện (IOCs) & YARA Rules
 
-## 1. Bảng tổng hợp IOCs cả 3 mẫu
+### 1. Bảng tổng hợp IOCs cả 3 mẫu
 
 | Mẫu | Tên file | Kích thước | SHA-256 | Dấu vết Host / Persistence | Network IOC / C2 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -1906,7 +1808,7 @@ Khi giám sát tiến trình `wss.exe` trên Process Monitor (bộ lọc: `Proce
 
 ---
 
-## 2. Bộ luật YARA (YARA Ruleset)
+### 2. Bộ luật YARA (YARA Ruleset)
 
 ```yara
 /*
@@ -2014,7 +1916,3 @@ rule Posilod_Libcef_DLL_Sideloading {
 }
 ```
 
-
-
-
- 
